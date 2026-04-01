@@ -91,6 +91,31 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     return positions
 
 
+def angles(positions, edges, num_nodes):
+    
+    for first_node, other_node in edges:
+        dist_x = positions[first_node][0] - positions[other_node][0]
+        dist_y = positions[first_node][1] - positions[other_node][1]
+        dist = math.sqrt(dist_x ** 2 + dist_y ** 2)
+        if dist_y == 0:
+            angle = math.pi/2
+        elif dist_x == 0:
+            angle = math.pi
+        else:
+            angle = math.atan(abs(dist_x) / abs(dist_y))
+        
+        if angle < math.pi/12:
+            ideal_angle = 0
+        elif math.pi/12 < angle <= math.pi/4:
+            ideal_angle = math.pi/6
+        elif math.pi/4 < angle <= 5 * math.pi/12:
+            ideal_angle = math.pi/3
+        elif 5 * math.pi/12 < angle:
+            ideal_angle = math.pi/2
+            
+        print(first_node, other_node, math.degrees(angle), math.degrees(ideal_angle))
+
+
 def gravity(positions, num_nodes, width, height, iterations):
     area = width * height
     ideal_dist = math.sqrt(area / num_nodes)
@@ -100,7 +125,7 @@ def gravity(positions, num_nodes, width, height, iterations):
     too_close = []
     rand_node = random.randint(0, num_nodes - 1)
     stopped_nodes.add(rand_node)
-
+    print(stopped_nodes)
     for _ in range(iterations):
         displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
 
@@ -160,14 +185,16 @@ def separate(positions, num_nodes, min_dist):
 
 
 def main():
-    edges = [(0,1),(1,2), (2,0), (2,3), (3,4), (4,5), (5,6), (6,7), (4,6), (7,2), (3,6), (2,5)]
+    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5)]
     num_nodes = 8
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
     print(positions)
     G = nx.Graph()
     G.add_edges_from(edges)
     save_png(G, positions, 500, 300, "graph_final.png", 150)
-
+    
+    angles(positions, edges, num_nodes)
+           
     positions = gravity(positions, num_nodes, 500, 300, 50)
     print(positions)
     H = nx.Graph()
