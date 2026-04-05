@@ -41,7 +41,7 @@ def attractive_f(edges, ideal_dist, positions, displacement):
 
         dist_x = positions[first_node][0] - positions[other_node][0]
         dist_y = positions[first_node][1] - positions[other_node][1]
-        dist = math.sqrt(dist_x ** 2 + dist_y ** 2)
+        dist = math.sqrt(dist_x ** 2 + dist_y ** 2) or 1e-6
 
         displacement[first_node][0] -= (dist_x/dist) * (dist**2 / ideal_dist)
         displacement[first_node][1] -= (dist_y/dist) * (dist**2 / ideal_dist)
@@ -91,54 +91,54 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     return positions
 
 
-def angles(positions, edges, num_nodes, width, height, iterations):
-    displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
+def angles(positions, edges, num_nodes, width, height, displacement):
+    #displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
     step = 0.1  # fraction to move toward ideal angle each call
-    for _ in range(iterations):
-        for first_node, other_node in edges:
-            dist_x = positions[first_node][0] - positions[other_node][0]
-            dist_y = positions[first_node][1] - positions[other_node][1]
-            dist = math.sqrt(dist_x**2 + dist_y**2) or 1e-6
 
-            if dist_x == 0:
-                ratio = float('inf')
-            else:
-                ratio = abs(dist_y / dist_x)
+    for first_node, other_node in edges:
+        dist_x = positions[first_node][0] - positions[other_node][0]
+        dist_y = positions[first_node][1] - positions[other_node][1]
+        dist = math.sqrt(dist_x**2 + dist_y**2) or 1e-6
 
-            # snap to nearest of 0°, 30°, 60°, 90°
-            # preserve original dist so node stays same distance away
-            if ratio < 1 / (2 * math.sqrt(3)):          # snap to 0°
-                ideal_dx = math.copysign(dist, dist_x)
-                ideal_dy = 0.0
-            elif ratio < 1:                              # snap to 30°
-                ideal_dx = math.copysign(dist / (2), dist_x)
-                ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
-            elif ratio < 2 * math.sqrt(3):              # snap to 60°
-                ideal_dx = math.copysign(dist / 2, dist_x)
-                ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
-            else:                                        # snap to 90°
-                ideal_dx = 0.0
-                ideal_dy = math.copysign(dist, dist_y)
+        if dist_x == 0:
+            ratio = float('inf')
+        else:
+            ratio = abs(dist_y / dist_x)
 
-            # ideal position of other_node relative to first_node
-            ideal_x = positions[first_node][0] - ideal_dx
-            ideal_y = positions[first_node][1] - ideal_dy
+        # snap to nearest of 0°, 30°, 60°, 90°
+        # preserve original dist so node stays same distance away
+        if ratio < 1 / (2 * math.sqrt(3)):          # snap to 0°
+            ideal_dx = math.copysign(dist, dist_x)
+            ideal_dy = 0.0
+        elif ratio < 1:                              # snap to 30°
+            ideal_dx = math.copysign(dist / (2), dist_x)
+            ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
+        elif ratio < 2 * math.sqrt(3):              # snap to 60°
+            ideal_dx = math.copysign(dist / 2, dist_x)
+            ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
+        else:                                        # snap to 90°
+            ideal_dx = 0.0
+            ideal_dy = math.copysign(dist, dist_y)
 
-            # accumulate small step toward ideal
-            displacement[other_node][0] += (ideal_x - positions[other_node][0]) * step
-            displacement[other_node][1] += (ideal_y - positions[other_node][1]) * step
+        # ideal position of other_node relative to first_node
+        ideal_x = positions[first_node][0] - ideal_dx
+        ideal_y = positions[first_node][1] - ideal_dy
+
+        # accumulate small step toward ideal
+        displacement[other_node][0] += (ideal_x - positions[other_node][0]) * step
+        displacement[other_node][1] += (ideal_y - positions[other_node][1]) * step
 
     # apply all displacements at once
-    for node in range(num_nodes):
-        dx, dy = displacement[node]
-        new_x = max(0.0, min(width,  positions[node][0] + dx))
-        new_y = max(0.0, min(height, positions[node][1] + dy))
-        positions[node] = (new_x, new_y)
+    # for node in range(num_nodes):
+    #     dx, dy = displacement[node]
+    #     new_x = max(0.0, min(width,  positions[node][0] + dx))
+    #     new_y = max(0.0, min(height, positions[node][1] + dy))
+    #     positions[node] = (new_x, new_y)
 
-    return positions
+    return displacement
 
 
-def gravity(positions, num_nodes, width, height, iterations):
+def gravity(edges, positions, num_nodes, width, height, iterations):
     area = width * height
     ideal_dist = math.sqrt(area / num_nodes)
     temperature = width / 10.0
@@ -177,6 +177,9 @@ def gravity(positions, num_nodes, width, height, iterations):
             positions[node] = (new_x, new_y)
 
         positions, too_close = separate(positions, num_nodes, 50.0)
+
+        angles(positions, edges, num_nodes, width, height, displacement)
+
         for item in too_close:
             stopped_nodes.add(item)
         temperature = max(temperature - cooling, 1e-6)
@@ -207,17 +210,19 @@ def separate(positions, num_nodes, min_dist):
 
 
 def main():
-    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5)]
-    num_nodes = 8
+    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7), (7,8), (8,9), (9,10), (10,11), (11,12) 
+             ,(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5)]
+    #,(4,6), (4,2), (3,6), (2,5), (1,5)
+    num_nodes = 17
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
     print(positions)
     G = nx.Graph()
     G.add_edges_from(edges)
     save_png(G, positions, 500, 300, "graph_final.png", 150)
     
-    positions = angles(positions, edges, num_nodes, 500, 300, 100)
+    #positions = angles(positions, edges, num_nodes, 500, 300, 100)
            
-    #positions = gravity(positions, num_nodes, 500, 300, 50)
+    positions = gravity(edges, positions, num_nodes, 500, 300, 100)
     print(positions)
     H = nx.Graph()
     H.add_edges_from(edges)
