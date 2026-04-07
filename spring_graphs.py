@@ -2,6 +2,68 @@ import math
 import random
 import networkx as nx
 import matplotlib.pyplot as plt
+from itertools import permutations
+
+
+def assign_angles(positions, edges, num_nodes):
+    from collections import defaultdict
+    SLOTS = [
+        0,
+        math.pi / 6,       # 30°
+        math.pi / 3,       # 60°
+        7 * math.pi / 6,   # 210°
+        4 * math.pi / 3,   # 240°
+        3 * math.pi / 2,   # 270°
+    ]    
+    #        math.pi / 2,       # 90°
+        #math.pi,           # 180°
+    adjacency = defaultdict(list)
+    for u, v in edges:
+        adjacency[u].append(v)
+        adjacency[v].append(u)
+
+    ideal_angles = {}
+
+    for node in range(num_nodes):
+        neighbours = adjacency[node]
+        n = len(neighbours)
+        if n == 0:
+            continue
+
+        # current angle from node to each neighbour
+        current_angles = []
+        for nb in neighbours:
+            dx = positions[nb][0] - positions[node][0]
+            dy = positions[nb][1] - positions[node][1]
+            current_angles.append(math.atan2(dy, dx))
+
+        # find the assignment of slots to neighbours that minimises
+        # total angular error — try all permutations of n slots from 8
+        best_cost = float('inf')
+        best_assignment = None
+
+        # only need to consider subsets of slots of size n
+        from itertools import combinations
+        for slot_subset in combinations(SLOTS, n):
+            for perm in permutations(slot_subset):
+                cost = sum(
+                    angle_diff(current_angles[i], perm[i])
+                    for i in range(n)
+                )
+                if cost < best_cost:
+                    best_cost = cost
+                    best_assignment = perm
+
+        for nb, angle in zip(neighbours, best_assignment):
+            ideal_angles[(node, nb)] = angle
+
+    return ideal_angles
+
+
+def angle_diff(a, b):
+    # smallest angular distance between two angles
+    diff = abs(a - b) % (2 * math.pi)
+    return min(diff, 2 * math.pi - diff)
 
 
 def save_png(graph, pos, width, height, path, dpi=150):
@@ -91,51 +153,30 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     return positions
 
 
-def angles(positions, edges, num_nodes, width, height, displacement):
-    #displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
-    step = 0.1  # fraction to move toward ideal angle each call
+def angles(positions, edges, num_nodes, width, height, ideal_angles, step=0.1):
+    displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
 
     for first_node, other_node in edges:
-        dist_x = positions[first_node][0] - positions[other_node][0]
-        dist_y = positions[first_node][1] - positions[other_node][1]
+        dist_x = positions[other_node][0] - positions[first_node][0]
+        dist_y = positions[other_node][1] - positions[first_node][1]
         dist = math.sqrt(dist_x**2 + dist_y**2) or 1e-6
 
-        if dist_x == 0:
-            ratio = float('inf')
-        else:
-            ratio = abs(dist_y / dist_x)
+        for src, dst in [(first_node, other_node), (other_node, first_node)]:
+            target_angle = ideal_angles.get((src, dst))
+            if target_angle is None:
+                continue
+            ideal_x = positions[src][0] + math.cos(target_angle) * dist
+            ideal_y = positions[src][1] + math.sin(target_angle) * dist
+            displacement[dst][0] += (ideal_x - positions[dst][0]) * step
+            displacement[dst][1] += (ideal_y - positions[dst][1]) * step
 
-        # snap to nearest of 0°, 30°, 60°, 90°
-        # preserve original dist so node stays same distance away
-        if ratio < 1 / (2 * math.sqrt(3)):          # snap to 0°
-            ideal_dx = math.copysign(dist, dist_x)
-            ideal_dy = 0.0
-        elif ratio < 1:                              # snap to 30°
-            ideal_dx = math.copysign(dist / (2), dist_x)
-            ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
-        elif ratio < 2 * math.sqrt(3):              # snap to 60°
-            ideal_dx = math.copysign(dist / 2, dist_x)
-            ideal_dy = math.copysign(dist * math.sqrt(3) / 2, dist_y)
-        else:                                        # snap to 90°
-            ideal_dx = 0.0
-            ideal_dy = math.copysign(dist, dist_y)
+    for node in range(num_nodes):
+        dx, dy = displacement[node]
+        new_x = max(0.0, min(width,  positions[node][0] + dx))
+        new_y = max(0.0, min(height, positions[node][1] + dy))
+        positions[node] = (new_x, new_y)
 
-        # ideal position of other_node relative to first_node
-        ideal_x = positions[first_node][0] - ideal_dx
-        ideal_y = positions[first_node][1] - ideal_dy
-
-        # accumulate small step toward ideal
-        displacement[other_node][0] += (ideal_x - positions[other_node][0]) * step
-        displacement[other_node][1] += (ideal_y - positions[other_node][1]) * step
-
-    # apply all displacements at once
-    # for node in range(num_nodes):
-    #     dx, dy = displacement[node]
-    #     new_x = max(0.0, min(width,  positions[node][0] + dx))
-    #     new_y = max(0.0, min(height, positions[node][1] + dy))
-    #     positions[node] = (new_x, new_y)
-
-    return displacement
+    return positions
 
 
 def gravity(edges, positions, num_nodes, width, height, iterations):
@@ -165,7 +206,8 @@ def gravity(edges, positions, num_nodes, width, height, iterations):
                     displacement[other_node][1] += (dist_y / dist) * force 
                     displacement[rand_node][0]  -= (dist_x / dist) * force
                     displacement[rand_node][1]  -= (dist_y / dist) * force 
-
+        
+        
         for node in range(num_nodes):
             dx, dy = displacement[node]
             magnitude = math.sqrt(dx ** 2 + dy ** 2) or 1e-6
@@ -176,9 +218,13 @@ def gravity(edges, positions, num_nodes, width, height, iterations):
             new_y = max(0.0, min(height, new_y))
             positions[node] = (new_x, new_y)
 
+        # recompute slot assignments based on current positions
+        ideal_angles = assign_angles(positions, edges, num_nodes)
+    
+        # ... your existing F-R forces ...
+        positions = angles(positions, edges, num_nodes, width, height, ideal_angles)
         positions, too_close = separate(positions, num_nodes, 50.0)
 
-        angles(positions, edges, num_nodes, width, height, displacement)
 
         for item in too_close:
             stopped_nodes.add(item)
@@ -199,8 +245,12 @@ def separate(positions, num_nodes, min_dist):
                 too_close.append(node)
                 too_close.append(other_node)
                 overlap = (min_dist - dist)/2
-                push_x = (dx / dist) * overlap
-                push_y = (dx/dist) * overlap
+                if dist != 0:
+                    push_x = (dx / dist) * overlap
+                    push_y = (dx/dist) * overlap
+                else:
+                    push_x = 100
+                    push_y = 100
                 node_x, node_y = positions[node]
                 other_node_x, other_node_y = positions[other_node]
                 positions[node] = (node_x + push_x, node_y + push_y)
