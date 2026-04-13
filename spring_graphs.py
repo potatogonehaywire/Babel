@@ -192,38 +192,39 @@ def gravity(edges, positions, num_nodes, width, height, iterations):
     for _ in range(iterations):
         displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
 
-        for other_node in range(num_nodes):
-            if other_node not in stopped_nodes:
-                dist_x = positions[rand_node][0] - positions[other_node][0]
-                dist_y = positions[rand_node][1] - positions[other_node][1]
-                dist = math.sqrt(dist_x ** 2 + dist_y ** 2) or 1e-6
+        #for other_node in range(num_nodes):
+            #if other_node not in stopped_nodes:
+                #dist_x = positions[rand_node][0] - positions[other_node][0]
+                #dist_y = positions[rand_node][1] - positions[other_node][1]
+                #dist = math.sqrt(dist_x ** 2 + dist_y ** 2) or 1e-6
 
-                if dist < 50.0:
-                    stopped_nodes.add(other_node)
-                else:
-                    force = dist ** 2 / ideal_dist
-                    displacement[other_node][0] += (dist_x / dist) * force
-                    displacement[other_node][1] += (dist_y / dist) * force 
-                    displacement[rand_node][0]  -= (dist_x / dist) * force
-                    displacement[rand_node][1]  -= (dist_y / dist) * force 
+                #if dist < 10.0:
+                    #stopped_nodes.add(other_node)
+                #else:
+                    #force = dist ** 2 / ideal_dist
+                    #displacement[other_node][0] += (dist_x / dist) * force
+                    #displacement[other_node][1] += (dist_y / dist) * force 
+                    #displacement[rand_node][0]  -= (dist_x / dist) * force
+                    #displacement[rand_node][1]  -= (dist_y / dist) * force 
         
         
-        for node in range(num_nodes):
-            dx, dy = displacement[node]
-            magnitude = math.sqrt(dx ** 2 + dy ** 2) or 1e-6
-            clamped = min(magnitude, temperature)
-            new_x = positions[node][0] + (dx / magnitude) * clamped
-            new_y = positions[node][1] + (dy / magnitude) * clamped
-            new_x = max(0.0, min(width, new_x))
-            new_y = max(0.0, min(height, new_y))
-            positions[node] = (new_x, new_y)
+        #for node in range(num_nodes):
+            #dx, dy = displacement[node]
+            #magnitude = math.sqrt(dx ** 2 + dy ** 2) or 1e-6
+            #clamped = min(magnitude, temperature)
+            #new_x = positions[node][0] + (dx / magnitude) * clamped
+            #new_y = positions[node][1] + (dy / magnitude) * clamped
+            #new_x = max(0.0, min(width, new_x))
+            #new_y = max(0.0, min(height, new_y))
+            #positions[node] = (new_x, new_y)
 
         # recompute slot assignments based on current positions
         ideal_angles = assign_angles(positions, edges, num_nodes)
+        print(ideal_angles)
     
         # ... your existing F-R forces ...
         positions = angles(positions, edges, num_nodes, width, height, ideal_angles)
-        positions, too_close = separate(positions, num_nodes, 50.0)
+        #positions = separate(positions, num_nodes, 100.0)
 
 
         for item in too_close:
@@ -256,27 +257,60 @@ def separate(positions, num_nodes, min_dist):
                 positions[node] = (node_x + push_x, node_y + push_y)
                 positions[other_node] = (other_node_x - push_x, other_node_y - push_y)
     
-    return positions, too_close
+    return positions
+
+
+def reconnect(positions, edges, num_nodes):
+    connectable_nodes = [ i for i in range(num_nodes)]
+    edges = [(i, 0) for i in range(num_nodes)]
+    distance = {i: {a: 0 for a in range(num_nodes)} for i in range(num_nodes)}
+    closest = {i: [0,5000] for i in range(num_nodes)}
+    for node, coords in positions.items():
+        for other_node in range(node + 1, num_nodes):
+            dist_x = coords[0] - positions[other_node][0]
+            dist_y = coords[1] - positions[other_node][1]
+            dist_total = math.sqrt(dist_x ** 2 + dist_y ** 2)
+            
+            distance[node][other_node] = dist_total
+            
+    for node in connectable_nodes:
+        connectable_nodes.remove(node)
+        for other_node in connectable_nodes:
+            if distance[node][other_node] < closest[node][1]:
+                closest[node][0] = other_node
+                closest[node][1] = distance[node][other_node]
+                print(closest[node][0])
+                print(connectable_nodes)
+
+            if closest[node][0] in connectable_nodes:
+                connectable_nodes.remove(closest[node][0])
+    
+    print(distance)
+    for i in range(num_nodes):
+        edges[i] = (i, closest[i][0])
+    
+    return edges
 
 
 def main():
-    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7), (7,8), (8,9), (9,10), (10,11), (11,12) 
-             ,(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5)]
-    #,(4,6), (4,2), (3,6), (2,5), (1,5)
-    num_nodes = 17
+    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5)]
+    #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5)
+    num_nodes = 8
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
-    print(positions)
+    print(f"fruchterman positions {positions}")
     G = nx.Graph()
     G.add_edges_from(edges)
     save_png(G, positions, 500, 300, "graph_final.png", 150)
     
     #positions = angles(positions, edges, num_nodes, 500, 300, 100)
-           
-    positions = gravity(edges, positions, num_nodes, 500, 300, 100)
-    print(positions)
+    
+    #positions = gravity(edges, positions, num_nodes, 500, 300, 100)
+    #print(f"gravity + angles positions {positions}")
+    edges = reconnect(positions, edges, num_nodes)
+    
     H = nx.Graph()
     H.add_edges_from(edges)
-    save_png(H, positions, 500, 300, "graph_gravity.png", 150)
+    save_png(H, positions, 500, 300, "graph_reorder.png", 150)
 
 
 main()
