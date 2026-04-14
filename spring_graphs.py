@@ -261,10 +261,11 @@ def separate(positions, num_nodes, min_dist):
 
 
 def reconnect(positions, edges, num_nodes):
-    connectable_nodes = [ i for i in range(num_nodes)]
+    connectable_nodes = { i: i for i in range(num_nodes)}
     edges = [(i, 0) for i in range(num_nodes)]
     distance = {i: {a: 0 for a in range(num_nodes)} for i in range(num_nodes)}
     closest = {i: [0,5000] for i in range(num_nodes)}
+    
     for node, coords in positions.items():
         for other_node in range(node + 1, num_nodes):
             dist_x = coords[0] - positions[other_node][0]
@@ -273,28 +274,46 @@ def reconnect(positions, edges, num_nodes):
             
             distance[node][other_node] = dist_total
             
-    for node in connectable_nodes:
-        connectable_nodes.remove(node)
+    node = 0
+    connectable_nodes.pop(node)
+    for i in range(num_nodes):
+        print("current node", node)
+        #connectable_nodes.remove(node)
         for other_node in connectable_nodes:
             if distance[node][other_node] < closest[node][1]:
                 closest[node][0] = other_node
                 closest[node][1] = distance[node][other_node]
-                print(closest[node][0])
-                print(connectable_nodes)
+        print("closest node", closest[node][0])
 
-            if closest[node][0] in connectable_nodes:
-                connectable_nodes.remove(closest[node][0])
-    
+        if len(connectable_nodes) > 1 :
+            print("before pop", connectable_nodes)
+            node = connectable_nodes.pop(closest[node][0])
+            print("after pop", connectable_nodes)
+                
+    #for node in connectable_nodes:
+        #connectable_nodes.remove(node)
+        #for other_node in connectable_nodes:
+            #if distance[node][other_node] < closest[node][1]:
+                #closest[node][0] = other_node
+                #closest[node][1] = distance[node][other_node]
+                #print(closest[node][0])
+                #print(connectable_nodes)
+
+            #if closest[node][0] in connectable_nodes:
+                #connectable_nodes.pop(closest[node][0])
+
     print(distance)
     for i in range(num_nodes):
         edges[i] = (i, closest[i][0])
-    
+
+    edges.remove((closest[node][0], 0))
+    print(edges)
     return edges
 
 
 def main():
     edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5)]
-    #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5)
+    #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
     num_nodes = 8
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
     print(f"fruchterman positions {positions}")
@@ -304,13 +323,17 @@ def main():
     
     #positions = angles(positions, edges, num_nodes, 500, 300, 100)
     
-    #positions = gravity(edges, positions, num_nodes, 500, 300, 100)
+    positions = gravity(edges, positions, num_nodes, 500, 300, 100)
+    M = nx.Graph()
+    M.add_edges_from(edges)
+    save_png(M, positions, 500, 300, "graph_gravity.png", 150)
     #print(f"gravity + angles positions {positions}")
     edges = reconnect(positions, edges, num_nodes)
     
     H = nx.Graph()
     H.add_edges_from(edges)
     save_png(H, positions, 500, 300, "graph_reorder.png", 150)
+    
 
 
 main()
