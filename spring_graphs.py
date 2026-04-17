@@ -7,63 +7,61 @@ from itertools import permutations
 
 def assign_angles(positions, edges, num_nodes):
     from collections import defaultdict
-    SLOTS = [
-        0,
-        math.pi / 6,       # 30°
-        math.pi / 3,       # 60°
-        7 * math.pi / 6,   # 210°
-        4 * math.pi / 3,   # 240°
-        3 * math.pi / 2,   # 270°
-    ]    
-    #        math.pi / 2,       # 90°
-        #math.pi,           # 180°
+
+    SLOTS = {
+        0 : math.pi/2,
+        math.pi/2 : 0,
+        math.pi / 3 : math.pi/6,
+        math.pi / 6 : math.pi/3,
+        2 * math.pi / 3 : 5 * math.pi/6,
+        5 * math.pi / 6 : 2 * math.pi / 3,
+        7 * math.pi / 6 : 4 * math.pi / 3,
+        4 * math.pi / 3 : 7 * math.pi / 6,
+        5 * math.pi / 3 : 11 * math.pi / 6,
+        11 * math.pi / 6 : 5 * math.pi / 3
+    }    
+
+
     adjacency = defaultdict(list)
     for u, v in edges:
         adjacency[u].append(v)
         adjacency[v].append(u)
 
     ideal_angles = {}
+    used_slots = defaultdict(set)
 
-    for node in range(num_nodes):
-        neighbours = adjacency[node]
-        n = len(neighbours)
-        if n == 0:
+    slot_list = list(SLOTS.keys())
+
+    for u, v in edges:
+        # skip if edge already handled
+        if (u, v) in ideal_angles:
             continue
 
-        # current angle from node to each neighbour
-        current_angles = []
-        for nb in neighbours:
-            dx = positions[nb][0] - positions[node][0]
-            dy = positions[nb][1] - positions[node][1]
-            current_angles.append(math.atan2(dy, dx))
+        # find a free slot for u
+        chosen_slot = None
+        for slot in slot_list:
+            if slot not in used_slots[u] and SLOTS[slot] not in used_slots[v]:
+                chosen_slot = slot
+                break
 
-        # find the assignment of slots to neighbours that minimises
-        # total angular error — try all permutations of n slots from 8
-        best_cost = float('inf')
-        best_assignment = None
+        if chosen_slot is None:
+            raise ValueError(f"No available angle slot for edge ({u}, {v})")
 
-        # only need to consider subsets of slots of size n
-        from itertools import combinations
-        for slot_subset in combinations(SLOTS, n):
-            for perm in permutations(slot_subset):
-                cost = sum(
-                    angle_diff(current_angles[i], perm[i])
-                    for i in range(n)
-                )
-                if cost < best_cost:
-                    best_cost = cost
-                    best_assignment = perm
+        paired = SLOTS[chosen_slot]
 
-        for nb, angle in zip(neighbours, best_assignment):
-            ideal_angles[(node, nb)] = angle
+        ideal_angles[(u, v)] = chosen_slot
+        ideal_angles[(v, u)] = paired
+
+        used_slots[u].add(chosen_slot)
+        used_slots[v].add(paired)
 
     return ideal_angles
 
 
-def angle_diff(a, b):
+#def angle_diff(a, b):
     # smallest angular distance between two angles
-    diff = abs(a - b) % (2 * math.pi)
-    return min(diff, 2 * math.pi - diff)
+    #diff = abs(a - b) % (2 * math.pi)
+    #return min(diff, 2 * math.pi - diff)
 
 
 def save_png(graph, pos, width, height, path, dpi=150):
@@ -222,9 +220,8 @@ def gravity(edges, positions, num_nodes, width, height, iterations):
         ideal_angles = assign_angles(positions, edges, num_nodes)
         print(ideal_angles)
     
-        # ... your existing F-R forces ...
+        positions = separate(positions, num_nodes, 50.0)
         positions = angles(positions, edges, num_nodes, width, height, ideal_angles)
-        #positions = separate(positions, num_nodes, 100.0)
 
 
         for item in too_close:
@@ -250,8 +247,8 @@ def separate(positions, num_nodes, min_dist):
                     push_x = (dx / dist) * overlap
                     push_y = (dx/dist) * overlap
                 else:
-                    push_x = 100
-                    push_y = 100
+                    push_x = 50
+                    push_y = 50
                 node_x, node_y = positions[node]
                 other_node_x, other_node_y = positions[other_node]
                 positions[node] = (node_x + push_x, node_y + push_y)
@@ -321,18 +318,18 @@ def main():
     G.add_edges_from(edges)
     save_png(G, positions, 500, 300, "graph_final.png", 150)
     
-    #positions = angles(positions, edges, num_nodes, 500, 300, 100)
+    edges = reconnect(positions, edges, num_nodes)
+    
+    H = nx.Graph()
+    H.add_edges_from(edges)
+    save_png(H, positions, 500, 300, "graph_reorder.png", 150)
     
     positions = gravity(edges, positions, num_nodes, 500, 300, 100)
     M = nx.Graph()
     M.add_edges_from(edges)
     save_png(M, positions, 500, 300, "graph_gravity.png", 150)
     #print(f"gravity + angles positions {positions}")
-    edges = reconnect(positions, edges, num_nodes)
-    
-    H = nx.Graph()
-    H.add_edges_from(edges)
-    save_png(H, positions, 500, 300, "graph_reorder.png", 150)
+
     
 
 
