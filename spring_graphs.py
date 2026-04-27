@@ -21,6 +21,9 @@ def assign_angles(positions, edges, num_nodes):
         11 * math.pi / 6 : 5 * math.pi / 3
     }    
 
+    rotation = random.uniform(0, 2 * math.pi)
+    SLOTS = { (k + rotation) % (2*math.pi): (v + rotation) % (2*math.pi)
+          for k, v in SLOTS.items() }
 
     adjacency = defaultdict(list)
     for u, v in edges:
@@ -58,10 +61,29 @@ def assign_angles(positions, edges, num_nodes):
     return ideal_angles
 
 
-#def angle_diff(a, b):
-    # smallest angular distance between two angles
-    #diff = abs(a - b) % (2 * math.pi)
-    #return min(diff, 2 * math.pi - diff)
+def center_force(positions, displacement, width, height, strength=0.01):
+    cx = width / 2
+    cy = height / 2
+
+    for i, (x, y) in positions.items():
+        displacement[i][0] += (cx - x) * strength
+        displacement[i][1] += (cy - y) * strength
+
+
+def edge_spring(edges, positions, displacement, target_len, strength=0.05):
+    for u, v in edges:
+        dx = positions[v][0] - positions[u][0]
+        dy = positions[v][1] - positions[u][1]
+        dist = math.sqrt(dx*dx + dy*dy) or 1e-6
+
+        force = (dist - target_len) * strength
+        fx = (dx / dist) * force
+        fy = (dy / dist) * force
+
+        displacement[u][0] += fx
+        displacement[u][1] += fy
+        displacement[v][0] -= fx
+        displacement[v][1] -= fy
 
 
 def save_png(graph, pos, width, height, path, dpi=150):
@@ -118,9 +140,6 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     for i in range(num_nodes):
         positions[i] = (random.uniform(0, width), random.uniform(0, height))
     
-    F = nx.Graph()
-    F.add_edges_from(edges)
-    save_png(F, positions, 500, 200, "graph_final.png", 150)
     
     area = width * height
     ideal_dist = math.sqrt(area/num_nodes)
@@ -151,81 +170,63 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     return positions
 
 
-def angles(positions, edges, num_nodes, width, height, ideal_angles, step=0.1):
+def angles(positions, edges, num_nodes, width, height, ideal_angles, step=0.15, target_len=100.0):
     displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
 
-    for first_node, other_node in edges:
-        dist_x = positions[other_node][0] - positions[first_node][0]
-        dist_y = positions[other_node][1] - positions[first_node][1]
-        dist = math.sqrt(dist_x**2 + dist_y**2) or 1e-6
-
-        for src, dst in [(first_node, other_node), (other_node, first_node)]:
-            target_angle = ideal_angles.get((src, dst))
-            if target_angle is None:
+    for u, v in edges:
+        for src, dst in [(u, v), (v, u)]:
+            angle = ideal_angles.get((src, dst))
+            if angle is None:
                 continue
-            ideal_x = positions[src][0] + math.cos(target_angle) * dist
-            ideal_y = positions[src][1] + math.sin(target_angle) * dist
-            displacement[dst][0] += (ideal_x - positions[dst][0]) * step
-            displacement[dst][1] += (ideal_y - positions[dst][1]) * step
+
+            # desired position at fixed distance along angle
+            ideal_x = positions[src][0] + math.cos(angle) * target_len
+            ideal_y = positions[src][1] + math.sin(angle) * target_len
+
+            dx = ideal_x - positions[dst][0]
+            dy = ideal_y - positions[dst][1]
+
+            displacement[dst][0] += dx * step
+            displacement[dst][1] += dy * step
+
+    
+    center_force(positions, displacement, width, height, strength=0.01)
+    edge_spring(edges, positions, displacement, target_len, strength=0.05)
+
+    MAX_STEP = 10.0
 
     for node in range(num_nodes):
         dx, dy = displacement[node]
-        new_x = max(0.0, min(width,  positions[node][0] + dx))
-        new_y = max(0.0, min(height, positions[node][1] + dy))
+        mag = math.hypot(dx, dy)
+        if mag > MAX_STEP:
+            dx *= MAX_STEP / mag
+            dy *= MAX_STEP / mag
+
+    for node in range(num_nodes):
+        x, y = positions[node]
+        dx, dy = displacement[node]
+
+        new_x = x + dx
+        new_y = y + dy
+
         positions[node] = (new_x, new_y)
 
     return positions
 
 
-def gravity(edges, positions, num_nodes, width, height, iterations):
-    area = width * height
-    ideal_dist = math.sqrt(area / num_nodes)
+def change_angles(edges, positions, num_nodes, width, height, iterations):
     temperature = width / 10.0
     cooling = temperature / (iterations + 1)
-    stopped_nodes = set()
-    too_close = []
-    rand_node = random.randint(0, num_nodes - 1)
-    stopped_nodes.add(rand_node)
-    print(stopped_nodes)
+
     for _ in range(iterations):
-        displacement = {i: [0.0, 0.0] for i in range(num_nodes)}
-
-        #for other_node in range(num_nodes):
-            #if other_node not in stopped_nodes:
-                #dist_x = positions[rand_node][0] - positions[other_node][0]
-                #dist_y = positions[rand_node][1] - positions[other_node][1]
-                #dist = math.sqrt(dist_x ** 2 + dist_y ** 2) or 1e-6
-
-                #if dist < 10.0:
-                    #stopped_nodes.add(other_node)
-                #else:
-                    #force = dist ** 2 / ideal_dist
-                    #displacement[other_node][0] += (dist_x / dist) * force
-                    #displacement[other_node][1] += (dist_y / dist) * force 
-                    #displacement[rand_node][0]  -= (dist_x / dist) * force
-                    #displacement[rand_node][1]  -= (dist_y / dist) * force 
-        
-        
-        #for node in range(num_nodes):
-            #dx, dy = displacement[node]
-            #magnitude = math.sqrt(dx ** 2 + dy ** 2) or 1e-6
-            #clamped = min(magnitude, temperature)
-            #new_x = positions[node][0] + (dx / magnitude) * clamped
-            #new_y = positions[node][1] + (dy / magnitude) * clamped
-            #new_x = max(0.0, min(width, new_x))
-            #new_y = max(0.0, min(height, new_y))
-            #positions[node] = (new_x, new_y)
 
         # recompute slot assignments based on current positions
         ideal_angles = assign_angles(positions, edges, num_nodes)
-        print(ideal_angles)
     
-        positions = separate(positions, num_nodes, 50.0)
+        positions = separate(positions, num_nodes, min_dist=80.0)
+
         positions = angles(positions, edges, num_nodes, width, height, ideal_angles)
 
-
-        for item in too_close:
-            stopped_nodes.add(item)
         temperature = max(temperature - cooling, 1e-6)
 
     return positions
@@ -245,10 +246,10 @@ def separate(positions, num_nodes, min_dist):
                 overlap = (min_dist - dist)/2
                 if dist != 0:
                     push_x = (dx / dist) * overlap
-                    push_y = (dx/dist) * overlap
+                    push_y = (dy /dist) * overlap
                 else:
-                    push_x = 50
-                    push_y = 50
+                    push_x = 80
+                    push_y = 80
                 node_x, node_y = positions[node]
                 other_node_x, other_node_y = positions[other_node]
                 positions[node] = (node_x + push_x, node_y + push_y)
@@ -274,63 +275,45 @@ def reconnect(positions, edges, num_nodes):
     node = 0
     connectable_nodes.pop(node)
     for i in range(num_nodes):
-        print("current node", node)
         #connectable_nodes.remove(node)
         for other_node in connectable_nodes:
             if distance[node][other_node] < closest[node][1]:
                 closest[node][0] = other_node
                 closest[node][1] = distance[node][other_node]
-        print("closest node", closest[node][0])
 
         if len(connectable_nodes) > 1 :
-            print("before pop", connectable_nodes)
             node = connectable_nodes.pop(closest[node][0])
-            print("after pop", connectable_nodes)
+
                 
-    #for node in connectable_nodes:
-        #connectable_nodes.remove(node)
-        #for other_node in connectable_nodes:
-            #if distance[node][other_node] < closest[node][1]:
-                #closest[node][0] = other_node
-                #closest[node][1] = distance[node][other_node]
-                #print(closest[node][0])
-                #print(connectable_nodes)
 
-            #if closest[node][0] in connectable_nodes:
-                #connectable_nodes.pop(closest[node][0])
-
-    print(distance)
     for i in range(num_nodes):
         edges[i] = (i, closest[i][0])
 
     edges.remove((closest[node][0], 0))
-    print(edges)
+    #print(edges)
     return edges
 
 
 def main():
-    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5)]
+    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5), (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)]
     #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
-    num_nodes = 8
+    num_nodes = 17
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
-    print(f"fruchterman positions {positions}")
     G = nx.Graph()
     G.add_edges_from(edges)
-    save_png(G, positions, 500, 300, "graph_final.png", 150)
+    save_png(G, positions, 500, 300, "graph_force.png", 150)
     
+    positions = change_angles(edges, positions, num_nodes, 500, 300, 100)
+    M = nx.Graph()
+    M.add_edges_from(edges)
+    save_png(M, positions, 500, 300, "graph_angles.png", 150)
+
     edges = reconnect(positions, edges, num_nodes)
     
     H = nx.Graph()
     H.add_edges_from(edges)
     save_png(H, positions, 500, 300, "graph_reorder.png", 150)
     
-    positions = gravity(edges, positions, num_nodes, 500, 300, 100)
-    M = nx.Graph()
-    M.add_edges_from(edges)
-    save_png(M, positions, 500, 300, "graph_gravity.png", 150)
-    #print(f"gravity + angles positions {positions}")
 
     
-
-
 main()
