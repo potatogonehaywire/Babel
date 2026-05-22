@@ -136,10 +136,12 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
 
     positions = {}
     displacement = {}
-
     for i in range(num_nodes):
         positions[i] = (random.uniform(0, width), random.uniform(0, height))
-    
+        
+    E = nx.Graph()
+    E.add_edges_from(edges)
+    save_png(E, positions, 500, 300, "graph_original.png", 150)    
     
     area = width * height
     ideal_dist = math.sqrt(area/num_nodes)
@@ -298,15 +300,16 @@ def main():
     edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5), (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)]
     #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
     num_nodes = 17
+
     positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
     G = nx.Graph()
     G.add_edges_from(edges)
     save_png(G, positions, 500, 300, "graph_force.png", 150)
     
-    positions = change_angles(edges, positions, num_nodes, 500, 300, 100)
-    M = nx.Graph()
-    M.add_edges_from(edges)
-    save_png(M, positions, 500, 300, "graph_angles.png", 150)
+    # positions = change_angles(edges, positions, num_nodes, 500, 300, 100)
+    # M = nx.Graph()
+    # M.add_edges_from(edges)
+    # save_png(M, positions, 500, 300, "graph_angles.png", 150)
 
     edges = reconnect(positions, edges, num_nodes)
     
