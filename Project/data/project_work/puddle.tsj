@@ -1,0 +1,14 @@
+{ "columns":10,
+ "image":"puddles.png",
+ "imageheight":320,
+ "imagewidth":320,
+ "margin":0,
+ "name":"puddle",
+ "spacing":0,
+ "tilecount":100,
+ "tiledversion":"1.10.2",
+ "tileheight":32,
+ "tilewidth":32,
+ "type":"tileset",
+ "version":"1.10"
+}

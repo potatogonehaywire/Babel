@@ -132,6 +132,17 @@ def attractive_f(edges, ideal_dist, positions, displacement):
     return displacement
 
 
+def gravity_f(num_nodes, positions, displacement, width, height, gravity=1.0):
+    center_x = width / 2
+    center_y = height / 2
+    for node in range(num_nodes):
+        dx = center_x - positions[node][0]
+        dy = center_y - positions[node][1]
+        displacement[node][0] += dx * gravity
+        displacement[node][1] += dy * gravity
+    return displacement
+
+
 def fruchterman_reingold(edges, num_nodes, width, height, iterations):
 
     positions = {}
@@ -144,7 +155,7 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     save_png(E, positions, 500, 300, "graph_original.png", 150)    
     
     area = width * height
-    ideal_dist = math.sqrt(area/num_nodes)
+    ideal_dist = math.sqrt(area/(num_nodes*2))
 
     temperature = width / 10.0
     cooling = temperature / (iterations + 1)
@@ -155,6 +166,7 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     
         displacement = repulsive_f(num_nodes, ideal_dist, positions, displacement)
         displacement = attractive_f(edges, ideal_dist, positions, displacement)
+        displacement = gravity_f(num_nodes, positions, displacement, width, height, gravity=0.03)
 
         for node in range(num_nodes):
             dx, dy = displacement[node]
@@ -260,40 +272,87 @@ def separate(positions, num_nodes, min_dist):
     return positions
 
 
-def reconnect(positions, edges, num_nodes):
-    connectable_nodes = { i: i for i in range(num_nodes)}
-    edges = [(i, 0) for i in range(num_nodes)]
-    distance = {i: {a: 0 for a in range(num_nodes)} for i in range(num_nodes)}
-    closest = {i: [0,5000] for i in range(num_nodes)}
-    
-    for node, coords in positions.items():
-        for other_node in range(node + 1, num_nodes):
-            dist_x = coords[0] - positions[other_node][0]
-            dist_y = coords[1] - positions[other_node][1]
-            dist_total = math.sqrt(dist_x ** 2 + dist_y ** 2)
-            
-            distance[node][other_node] = dist_total
-            
-    node = 0
-    connectable_nodes.pop(node)
+def segments_intersect(p1, p2, p3, p4):
+    """Returns True if segment p1-p2 intersects segment p3-p4 (ignoring shared endpoints)."""
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    d1 = cross(p3, p4, p1)
+    d2 = cross(p3, p4, p2)
+    d3 = cross(p1, p2, p3)
+    d4 = cross(p1, p2, p4)
+
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+       ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+    return False
+
+def edges_cross(e1, e2, positions):
+    """Returns True if two edges cross (shared nodes are not considered crossings)."""
+    a, b = e1
+    c, d = e2
+    if len({a, b, c, d}) < 4:  # shared endpoint → not a crossing
+        return False
+    return segments_intersect(positions[a], positions[b], positions[c], positions[d])
+
+
+def reconnect(positions, num_nodes):
+    # Build all candidate edges sorted by distance
+    candidates = []
     for i in range(num_nodes):
-        #connectable_nodes.remove(node)
-        for other_node in connectable_nodes:
-            if distance[node][other_node] < closest[node][1]:
-                closest[node][0] = other_node
-                closest[node][1] = distance[node][other_node]
+        for j in range(i + 1, num_nodes):
+            dx = positions[i][0] - positions[j][0]
+            dy = positions[i][1] - positions[j][1]
+            dist = math.sqrt(dx**2 + dy**2)
+            candidates.append((dist, i, j))
+    candidates.sort()
 
-        if len(connectable_nodes) > 1 :
-            node = connectable_nodes.pop(closest[node][0])
+    accepted = []
+    degree = {i: 0 for i in range(num_nodes)}
 
-                
+    # --- Pass 1: Kruskal-style spanning tree (guarantees connectivity) ---
+    parent = list(range(num_nodes))
 
-    for i in range(num_nodes):
-        edges[i] = (i, closest[i][0])
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
 
-    edges.remove((closest[node][0], 0))
-    #print(edges)
-    return edges
+    def union(x, y):
+        parent[find(x)] = find(y)
+
+    for dist, i, j in candidates:
+        if find(i) == find(j):
+            continue  # already connected, skip
+        if degree[i] >= 2 or degree[j] >= 2:
+            continue  # can't use this edge without violating degree cap
+
+        new_edge = (i, j)
+        if not any(edges_cross(new_edge, existing, positions) for existing in accepted):
+            accepted.append(new_edge)
+            degree[i] += 1
+            degree[j] += 1
+            union(i, j)
+
+    # Check if spanning tree was achievable — warn if not
+    roots = set(find(i) for i in range(num_nodes))
+    if len(roots) > 1:
+        print(f"Warning: could not fully connect graph ({len(roots)} components). "
+              f"Degree-2 + no-crossing constraints may be too strict for this layout.")
+
+    # --- Pass 2: Add remaining non-crossing edges up to degree cap ---
+    for dist, i, j in candidates:
+        if degree[i] >= 2 or degree[j] >= 2:
+            continue
+        new_edge = (i, j)
+        if new_edge not in accepted:
+            if not any(edges_cross(new_edge, existing, positions) for existing in accepted):
+                accepted.append(new_edge)
+                degree[i] += 1
+                degree[j] += 1
+
+    return accepted
 
 
 def main():
@@ -301,21 +360,23 @@ def main():
     #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
     num_nodes = 17
 
-    positions = fruchterman_reingold(edges, num_nodes, 500, 300, 100)
+    positions = fruchterman_reingold(edges, num_nodes, 500, 500, 100)
     G = nx.Graph()
     G.add_edges_from(edges)
-    save_png(G, positions, 500, 300, "graph_force.png", 150)
+    save_png(G, positions, 500, 500, "graph_force.png", 150)
     
     # positions = change_angles(edges, positions, num_nodes, 500, 300, 100)
     # M = nx.Graph()
     # M.add_edges_from(edges)
     # save_png(M, positions, 500, 300, "graph_angles.png", 150)
 
-    edges = reconnect(positions, edges, num_nodes)
+    edges = reconnect(positions, num_nodes)
     
     H = nx.Graph()
     H.add_edges_from(edges)
-    save_png(H, positions, 500, 300, "graph_reorder.png", 150)
+    save_png(H, positions, 500, 500, "graph_reorder.png", 150)
+
+    positions
     
 
     
