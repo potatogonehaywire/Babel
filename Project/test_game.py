@@ -27,6 +27,7 @@ MAP_HEIGHT = 50
 
 
 class Character(arcade.Sprite):
+    """ Class for all Animated Characters, updates animation each frame """
     def __init__(self, sprite_frames, scale, frame_duration, x, y):
         super().__init__()
         self.frames = sprite_frames
@@ -38,8 +39,8 @@ class Character(arcade.Sprite):
         self.direction = [-1,-1]
         self.center_x = x
         self.center_y = y        
-        # Set initial texture
         self.texture = self.frames[0]
+
 
     def update_animation(self, delta_time: float = 1 / 60):
         """Update which frame is displayed based on elapsed time."""
@@ -62,7 +63,9 @@ class Character(arcade.Sprite):
                     
                     
 class Guest(Character):
-    def __init__(self, sprite_frames, scale, frame_duration, x, y, player):
+    """ Class for all NPCs, inherited from the Character class, they move in random directions for random intervals
+    and move towards the exit when hit"""
+    def __init__(self, sprite_frames, scale, frame_duration, x, y, player, wall_list):
         super().__init__(sprite_frames, scale, frame_duration, x, y)
         #self.path = []
         #self.current_point = 0
@@ -75,28 +78,49 @@ class Guest(Character):
         self.wait_time = 0
         self.hurtbox_radius = 300
         self.change_direction()
+        self.wall_list = wall_list
+    
         
         
     def update(self, delta_time: float = 1 / 60):
+
         self.wait_time -= delta_time
 
         if self.wait_time <= 0:
+            hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
+            if hitting_wall:
+                for wall in hitting_wall:
+                    diff_x = wall.center_x - self.center_x
+                    diff_y = wall.center_y - self.center_y
+                    direction_x = -diff_x / abs(diff_x)
+                    direction_y = -diff_y / abs(diff_y)
+                    self.walk_away_from_wall(direction_x, direction_y)
             self.move()
 
         
-    def change_direction(self):
-        self.direction[0] = random.choice([-1,1])
-        self.direction[1] = random.choice([-1,1])
+    def walk_away_from_wall(self, x_direction, y_direction):
+        self.direction[0] = x_direction
+        self.direction[1] = y_direction
         self.to_move_x = random.randint(200, 500)
         self.to_move_y = random.randint(200, 500)
         self.target_x = self.to_move_x * self.direction[0] + self.center_x
         self.target_y = self.to_move_y * self.direction[1] + self.center_y
     
     
+    def change_direction(self):
+        self.direction[0] = random.choice([-1,1])
+        self.direction[1] = random.choice([-1,1])        
+        self.to_move_x = random.randint(200, 500)
+        self.to_move_y = random.randint(200, 500)
+        self.target_x = self.to_move_x * self.direction[0] + self.center_x
+        self.target_y = self.to_move_y * self.direction[1] + self.center_y        
+    
+
     def change_wait_time(self):
         self.wait_time = random.uniform(1,2)
         self.direction = [-1,-1]
     
+
     def move(self):
         if abs(self.center_x - self.target_x) < 10:
             if abs(self.center_y - self.target_y) < 10:
@@ -152,22 +176,31 @@ class Guest(Character):
 
 
 class Librarian(Guest):
+    """ Class for hostile NPCs, inherited from the Guest class, they will chase the player when the player is nearby"""
     
-    def __init__(self, sprite_frames, scale, frame_duration, x, y, player):
-        super().__init__(sprite_frames, scale, frame_duration, x, y, player)
+    def __init__(self, sprite_frames, scale, frame_duration, x, y, player, wall_list):
+        super().__init__(sprite_frames, scale, frame_duration, x, y, player, wall_list)
         self.speed = 3
         self.detection_radius = 500
 
     def update(self, delta_time : float = 1/60):
         distances = self.check_distance()
+        hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
         if distances[0] < self.detection_radius:
-            self.center_x += (distances[1] / distances[0]) * self.speed * 2
-            self.center_y += (distances[2] / distances[0]) * self.speed * 2
+            if not hitting_wall:
+                self.center_x += (distances[1] / distances[0]) * self.speed * 2
+                self.center_y += (distances[2] / distances[0]) * self.speed * 2
         else:
             self.wait_time -= delta_time
             if self.wait_time <= 0:
+                if hitting_wall:
+                    for wall in hitting_wall:
+                        diff_x = wall.center_x - self.center_x
+                        diff_y = wall.center_y - self.center_y
+                        direction_x = -diff_x / abs(diff_x)
+                        direction_y = -diff_y / abs(diff_y)
+                        self.walk_away_from_wall(direction_x, direction_y)
                 self.move()
-
 
 class MyGame(arcade.Window):
     """ Our custom Window Class"""
@@ -187,7 +220,7 @@ class MyGame(arcade.Window):
         self.guest_list = None
         self.librarian_list = None
         self.wall_list = None
-        self.bookcase_list = None
+        self.floor_list = None
         self.hotbar_sprite_list = None
         self.used_fire = False
         self.fire_list = None
@@ -198,8 +231,6 @@ class MyGame(arcade.Window):
 
         #setup hotbar
         self.hotbar = ["hand", "mop", "bucket", "torch" , "shovel"]
-        self.unselected_colour = (20, 20, 20)
-        self.selected_colour = (230,190,10)
         self.current_item = 0
         
         # Set up the player info
@@ -225,6 +256,8 @@ class MyGame(arcade.Window):
         self.time_left = TIME_LIMIT
         self.fire_spread_time = 0
         self.hovered_guests = []
+        self.hovered_puddles = []
+        self.correct_tool = False
         # Sprite lists
         self.player_list = arcade.SpriteList()
         self.guest_list = arcade.SpriteList()
@@ -233,22 +266,22 @@ class MyGame(arcade.Window):
         # Load textures for animation
         self.player_textures = arcade.load_spritesheet("data\sprites\player.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         
-        self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, 50, 300)
+        self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, 896, 4864)
         
         # Set up the player
         self.player_list.append(self.player)
         
         self.guest_textures = arcade.load_spritesheet("data\sprites\guest.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        self.guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, 50, 500, self.player)
+        self.guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, 896, 4964, self.player, self.wall_list)
         self.guest_list.append(self.guest)
         
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 200, 500, self.player)
+        self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1000, 4964, self.player, self.wall_list)
         self.librarian_list.append(self.librarian)
         
         self.water_level = 0        
         
-        map_name = "data/project_work/test_hexagon.tmj"
+        map_name = "data/maps/test_map.tmj"
         
         # Read in the tiled map
         self.tile_map = arcade.load_tilemap(map_name, scaling=TILE_SCALING)
@@ -256,7 +289,7 @@ class MyGame(arcade.Window):
         # Set wall SpriteList and any others that you have.
         self.puddle_list = self.tile_map.sprite_lists["Puddle"]
         self.wall_list = self.tile_map.sprite_lists["Wall"]
-        self.bookcase_list = self.tile_map.sprite_lists["Floor"]
+        self.floor_list = self.tile_map.sprite_lists["Floor"]
         
         self.cursor_sprite = arcade.Sprite()
         
@@ -264,18 +297,24 @@ class MyGame(arcade.Window):
         
         self.cursor_sprite.texture = self.cursor_textures[0]
         
+        self.burnable_coords = []
+        self.burnable_tiles = []
         self.wall_coords = []
         self.wall_tiles = []
+        self.floor_coords = []
+        self.floor_tiles = []
 
         for wall in self.wall_list:
             self.wall_coords.append(wall.position)
+            self.wall_tiles.append(self.pixel_to_tile(wall.position[0], wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
         
-        for bookcase in self.bookcase_list:
-            self.wall_coords.append(bookcase.position)
+        for floor in self.floor_list:
+            self.floor_coords.append(floor.position)
+            self.floor_tiles.append(self.pixel_to_tile(floor.position[0], floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
         
-        for tile in self.wall_coords:
-            self.wall_tiles.append(self.pixel_to_tile(tile[0], tile[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
-        
+        self.burnable_coords = self.wall_coords + self.floor_coords
+        self.burnable_tiles = self.wall_tiles + self.floor_tiles
+
         self.puddle_coords = {}
         
         for puddle in self.puddle_list:
@@ -285,53 +324,32 @@ class MyGame(arcade.Window):
         
         self.initial_puddles = len(self.puddle_list)
         
-        
+        # create hotbar sprites
         self.hotbar_sprite_list = arcade.SpriteList()
         hotbar_sprites = arcade.load_spritesheet("data/sprites/hotbar_items.png", sprite_width = 64, sprite_height = 64, columns = 5, count = 25)
-        mop_texture = hotbar_sprites[1]
-        mop = arcade.Sprite()
-        mop.texture = mop_texture
-        mop.scale = SPRITE_SCALING_HOTBAR
-        mop.center_x = 735
-        mop.center_y = 150
+
+        mop = arcade.Sprite(texture=hotbar_sprites[1], scale = SPRITE_SCALING_HOTBAR, center_x = 735, center_y = 150)
         self.hotbar_sprite_list.append(mop)
         
-        self.bucket = arcade.Sprite()
         self.buckets_textures = [hotbar_sprites[2], hotbar_sprites[7], hotbar_sprites[12], hotbar_sprites[17], hotbar_sprites[22]]
-        self.bucket.texture = self.buckets_textures[0]
-        self.bucket.scale = SPRITE_SCALING_HOTBAR
-        self.bucket.center_x = 840
-        self.bucket.center_y = 150
+        self.bucket = arcade.Sprite(texture=self.buckets_textures[0], scale = SPRITE_SCALING_HOTBAR, center_x = 840, center_y = 150)
         self.hotbar_sprite_list.append(self.bucket)
         
-        self.torch = arcade.Sprite()
         self.torch_textures = [hotbar_sprites[3], hotbar_sprites[8]]
-        self.torch.texture = self.torch_textures[0]
-        self.torch.scale = SPRITE_SCALING_HOTBAR
-        self.torch.center_x = 945
-        self.torch.center_y = 150
+        self.torch = arcade.Sprite(texture=self.torch_textures[0], scale = SPRITE_SCALING_HOTBAR, center_x = 945, center_y = 150)
         self.hotbar_sprite_list.append(self.torch)
         
-        shovel_texture = hotbar_sprites[4]
-        shovel = arcade.Sprite()
-        shovel.texture = shovel_texture
-        shovel.scale = SPRITE_SCALING_HOTBAR
-        shovel.center_x = 1050
-        shovel.center_y = 150
+        shovel = arcade.Sprite(texture=hotbar_sprites[4], scale = SPRITE_SCALING_HOTBAR, center_x = 1050, center_y = 150)
         self.hotbar_sprite_list.append(shovel)
         
-        self.restart_sprite = arcade.Sprite()
-        self.restart_sprite.texture = arcade.load_spritesheet("data/sprites/restart_button.png", sprite_width = 64, sprite_height = 64, columns = 1, count = 1)[0]
-        self.restart_sprite.scale = 0.7
-        self.restart_sprite.center_x = 1500
-        self.restart_sprite.center_y = 935
+        # create restart button sprites
+        self.restart_sprite = arcade.Sprite(
+            texture=arcade.load_spritesheet("data/sprites/restart_button.png", sprite_width = 64, sprite_height = 64, columns = 1, count = 1)[0],
+            scale = 0.7, center_x = 1500, center_y = 935)
         
         self.restart_bgs = arcade.SpriteList()
         self.restart_texture = arcade.load_spritesheet("data/sprites/restart_bg.png", sprite_width = 190, sprite_height = 60, columns = 1, count = 2)
-        self.restart_normal = arcade.Sprite()
-        self.restart_normal.texture = self.restart_texture[0]
-        self.restart_normal.center_x = 1560
-        self.restart_normal.center_y = 935
+        self.restart_normal = arcade.Sprite(texture = self.restart_texture[0], center_x = 1560, center_y = 935)
         self.restart_bgs.append(self.restart_normal)
         
         
@@ -364,7 +382,7 @@ class MyGame(arcade.Window):
         arcade.start_render()
 
         self.wall_list.draw(pixelated = True)
-        self.bookcase_list.draw(pixelated = True)
+        self.floor_list.draw(pixelated = True)
         self.puddle_list.draw(pixelated = True)
         self.small_pud_list.draw(pixelated = True)
         self.guest_list.draw(pixelated = True)
@@ -377,19 +395,18 @@ class MyGame(arcade.Window):
 
         arcade.draw_rectangle_filled(SCREEN_WIDTH/2, 150, 530, 110, (200, 200, 200))
         
-        arcade.draw_rectangle_filled(630 + self.current_item * 105, 150, 110, 110, self.selected_colour)
+        arcade.draw_rectangle_filled(630 + self.current_item * 105, 150, 110, 110, (230,190,10))
         
         for i in range(5):
             
             location = SCREEN_WIDTH/2 - 210
         
-            arcade.draw_rectangle_filled(location + i*105, 150, 100, 100, self.unselected_colour)
+            arcade.draw_rectangle_filled(location + i*105, 150, 100, 100, (20, 20, 20))
         
-        arcade.draw_text(f"Percentage of level burnt: {(len(self.tiles_on_fire)/len(self.wall_tiles) * 100):.2f}%", 30, 990, arcade.color.WHITE, 25)
-        arcade.draw_text(f"Puddles Wiped: {int((self.initial_puddles - len(self.puddle_list))/4)} / {int(self.initial_puddles/4)}", 30, 930, arcade.color.WHITE, 25)
+        arcade.draw_text(f"Percentage of level burnt: {(len(self.tiles_on_fire)/len(self.burnable_tiles) * 100):.2f}%", 30, 990, arcade.color.WHITE, 25)
+        arcade.draw_text(f"Puddles Wiped: {int((self.initial_puddles - len(self.puddle_list)))} / {int(self.initial_puddles)}", 30, 930, arcade.color.WHITE, 25)
         arcade.draw_text(f"Time Left: {self.time_left:.2f} s", 1380, 980, arcade.color.WHITE, 25)
-        
-        #arcade.draw_rectangle_filled(1560, 935, 180, 60, (10, 10, 10))
+
         self.restart_bgs.draw(pixelated = True)
         arcade.draw_text("Restart", 1530, 920, arcade.color.WHITE, 25)
         self.restart_sprite.draw(pixelated = True)
@@ -530,40 +547,50 @@ class MyGame(arcade.Window):
         """Handle mouse click events."""
 
         if button == arcade.MOUSE_BUTTON_LEFT:
+            # restart game if cursor is hovering over restart button
             if self.restart_normal.texture == self.restart_texture[1]:
                 self.setup()
             else:
+                # if using hand
                 if self.current_item == 0:
+                    # if cursor is hovering over a guest
                     if self.hovered_guests:
                         for guest in self.hovered_guests:
+                            # slap guest if the guest is in range
                             if guest.hurtbox_in_range():
                                 guest.is_hit()
-                            
+                # if using mop
                 elif self.current_item == 1:
-        
-                    hovered_puddles = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
                     
-                    if hovered_puddles:
-                            
+                    hovered_big_puddles = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
+                    
+                    # if cursor is hovering over a large puddle
+                    if hovered_big_puddles:
+                        
+                        # fill up water bucket
                         if self.water_level <= 3:
                             self.water_level += 1
                         
-                        for sprite in hovered_puddles:
+                        # remove water puddle
+                        for sprite in hovered_big_puddles:
                             sprite.remove_from_sprite_lists()
                             del self.puddle_coords[sprite]
                             
-                        other_puddles = []
-                        other_puddle_coords = {}
+                        # other_puddles = []
+                        # other_puddle_coords = {}
                         
-                        for pud, coords in self.puddle_coords.items(): 
-                            if abs(self.clicked_tile[0] - coords[1][0]) <= 1 and abs(self.clicked_tile[1] - coords[1][1]) <= 1 and self.clicked_tile != coords[1]:
-                                other_puddles.append(pud)
-        
-                        for puddle in other_puddles:
-                            puddle.remove_from_sprite_lists()
-                            del self.puddle_coords[puddle]
+                        # # find adjacent water puddles
+                        # for pud, coords in self.puddle_coords.items(): 
+                        #     if abs(self.clicked_tile[0] - coords[1][0]) <= 1 and abs(self.clicked_tile[1] - coords[1][1]) <= 1 and self.clicked_tile != coords[1]:
+                        #         other_puddles.append(pud)
+                        
+                        # #remove adjacent puddles
+                        # for puddle in other_puddles:
+                        #     puddle.remove_from_sprite_lists()
+                        #     del self.puddle_coords[puddle]
                     else:
                         hovered_small_pud = arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
+                        # if hovering over a small puddle
                         if hovered_small_pud:
                             if self.water_level <= 3:
                                 self.water_level += 1                            
@@ -572,26 +599,23 @@ class MyGame(arcade.Window):
                                 del self.slowed_fire_tiles[sprite]                            
         
         
-                elif self.current_item == 2 and self.water_level >= 1 and self.clicked_tile not in self.slowed_fire_tiles.values() and self.clicked_tile in self.wall_tiles:
+                elif self.current_item == 2 and self.water_level >= 1 and self.clicked_tile not in self.slowed_fire_tiles.values() and self.clicked_tile in self.floor_tiles:
                     self.spawn_water(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
                     self.water_level -= 1
                     
-                elif self.current_item == 3 and self.used_fire == False and self.clicked_tile in self.wall_tiles:
+                elif self.current_item == 3 and self.used_fire == False and self.clicked_tile in self.burnable_tiles:
                     self.used_fire = True
-                    #clicked_sprites = arcade.get_sprites_at_point((x,y), self.bookcase_list)
-                    #for sprite in clicked_sprites:
-                        #clicked_tile = self.pixel_to_tile(sprite.center_x, sprite.center_y, 32 * TILE_SCALING, 32 * TILE_SCALING, MAP_HEIGHT)
-                    if self.clicked_tile in self.wall_tiles:
+
+                    if self.clicked_tile in self.burnable_tiles:
                         print(f"FIRE: {self.clicked_tile}", flush = True)
                         self.spawn_fire(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
                         self.tiles_on_fire.append(self.clicked_tile)
                 
-                elif self.current_item == 4:
-                    if self.clicked_tile in self.wall_tiles:
-                        hovered_sprites = arcade.get_sprites_at_point((self.world_x,self.world_y), self.wall_list)
-                        for sprite in hovered_sprites:
-                            sprite.remove_from_sprite_lists()
-                        self.wall_tiles.remove(self.clicked_tile)
+                elif self.current_item == 4 and self.clicked_tile in self.wall_tiles:
+                    hovered_sprites = arcade.get_sprites_at_point((self.world_x,self.world_y), self.wall_list)
+                    for sprite in hovered_sprites:
+                        sprite.remove_from_sprite_lists()
+                    self.burnable_tiles.remove(self.clicked_tile)
 
 
     def on_mouse_motion(self, x, y, dx, dy):
@@ -628,7 +652,7 @@ class MyGame(arcade.Window):
 
 
     def spread_fire(self):
-        self.fire_spread_time = random.random() * 1
+        self.fire_spread_time = random.random()
         if len(self.tiles_on_fire) > 0:
             tiles_to_add = []
             for tile in self.tiles_on_fire:
@@ -644,7 +668,7 @@ class MyGame(arcade.Window):
                             self.puddles_touching_fire.append(item)
                             
             for tile in tiles_to_add:
-                if tile not in self.tiles_on_fire and tile in self.wall_tiles:
+                if tile not in self.tiles_on_fire and tile in self.burnable_tiles:
                     self.tiles_on_fire.append(tile)
                     self.spawn_fire(32 * TILE_SCALING * (tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - tile[1]))
 
@@ -670,49 +694,49 @@ class MyGame(arcade.Window):
     
     def change_cursor(self):
         self.world_x = self.mouse_x - SCREEN_WIDTH/2 + self.player.position[0]
-        self.world_y = self.mouse_y - SCREEN_HEIGHT/2 + self.player.position[1]        
+        self.world_y = self.mouse_y - SCREEN_HEIGHT/2 + self.player.position[1]
+
         if self.current_item > 0:
+            # only update clicked_tile if not using hand
             self.clicked_tile = self.pixel_to_tile(self.world_x, self.world_y, 32 * TILE_SCALING, 32 * TILE_SCALING, MAP_HEIGHT)
+
             if self.current_item == 1:
-                hovered_sprites = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
-                hovered_sprites += arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
-                if hovered_sprites:
-                    self.cursor_sprite.alpha = 255
-                    self.cursor_sprite.scale = 2
+                self.hovered_puddles = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
+                self.hovered_puddles+= arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
+                if self.hovered_puddles:
+                    self.correct_tool = True
                 else:
-                    self.cursor_sprite.alpha = 100
-                    self.cursor_sprite.scale = 1                    
-            elif self.current_item == 2 and self.clicked_tile in self.wall_tiles and self.water_level >= 1:
-                self.cursor_sprite.alpha = 255
-                self.cursor_sprite.scale = 2
-            elif self.current_item == 3 and self.clicked_tile in self.wall_tiles:
-                self.cursor_sprite.alpha = 255
-                self.cursor_sprite.scale = 2
+                    self.correct_tool = False
+
+            elif self.current_item == 2 and self.clicked_tile in self.floor_tiles and self.water_level >= 1:
+                self.correct_tool = True
+
+            elif self.current_item == 3 and self.clicked_tile in self.burnable_tiles:
+                self.correct_tool = True
+
             elif self.current_item == 4 and self.clicked_tile in self.wall_tiles:
-                hovered_walls = arcade.get_sprites_at_point((self.world_x,self.world_y), self.wall_list)
-                if hovered_walls:
-                    self.cursor_sprite.alpha = 255
-                    self.cursor_sprite.scale = 2
-                else:
-                    self.cursor_sprite.alpha = 100
-                    self.cursor_sprite.scale = 1                    
+                self.correct_tool = True       
             else:
-                self.cursor_sprite.alpha = 100
-                self.cursor_sprite.scale = 1
+                self.correct_tool = False
         else:
             self.hovered_guests = arcade.get_sprites_at_point((self.world_x,self.world_y), self.guest_list)
             self.hovered_guests += arcade.get_sprites_at_point((self.world_x,self.world_y), self.librarian_list)
             if self.hovered_guests:
                 for guest in self.hovered_guests:
                     if guest.hurtbox_in_range():
-                        self.cursor_sprite.alpha = 255
-                        self.cursor_sprite.scale = 1.5
+                        self.correct_tool = True
                     else:
-                        self.cursor_sprite.alpha = 100
-                        self.cursor_sprite.scale = 1  
+                        self.correct_tool = False
             else:
-                self.cursor_sprite.alpha = 100
-                self.cursor_sprite.scale = 1                
+                self.correct_tool = False
+
+        if self.correct_tool:
+            self.cursor_sprite.alpha = 255
+            self.cursor_sprite.scale = 2
+        else:
+            self.cursor_sprite.alpha = 100
+            self.cursor_sprite.scale = 1    
+
 
 
 def main():

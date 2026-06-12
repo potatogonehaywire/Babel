@@ -1,0 +1,26 @@
+{
+    "activeFile": "",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        }
+    },
+    "last.imagePath": "D:/Stuff/code/Babel/Project/data/sprites",
+    "map.height": 50,
+    "map.lastUsedFormat": "json",
+    "map.width": 50,
+    "openFiles": [
+    ],
+    "project": "test_rooms.tiled-project",
+    "recentFiles": [
+        "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 64,
+        "width": 64
+    }
+}
