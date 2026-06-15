@@ -98,7 +98,7 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     save_png(E, positions, 500, 300, "graph_original.png", 150)    
     
     area = width * height
-    ideal_dist = math.sqrt(area/(num_nodes*2))
+    ideal_dist = math.sqrt(area/(num_nodes*10))
 
     temperature = width / 10.0
     cooling = temperature / (iterations + 1)
@@ -109,7 +109,7 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     
         displacement = repulsive_f(num_nodes, ideal_dist, positions, displacement)
         displacement = attractive_f(edges, ideal_dist, positions, displacement)
-        displacement = gravity_f(num_nodes, positions, displacement, width, height, gravity=0.03)
+        displacement = gravity_f(num_nodes, positions, displacement, width, height, gravity=0.1)
 
         for node in range(num_nodes):
             dx, dy = displacement[node]
