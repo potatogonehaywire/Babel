@@ -2,13 +2,17 @@
     "activeFile": "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj",
     "expandedProjectPaths": [
     ],
+    "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj": {
             "scale": 0.75,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 540.6666666666666,
-                "y": 472.66666666666674
+                "x": 763.3333333333333,
+                "y": 516.6666666666667
             }
         },
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx": {
@@ -18,6 +22,20 @@
         "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx": {
             "scaleInDock": 1,
             "scaleInEditor": 1
+        },
+        "D:/Stuff/code/Babel/Project/dungeon_map.tmj": {
+            "scale": 0.75,
+            "selectedLayer": 3,
+            "viewCenter": {
+                "x": 635.3333333333333,
+                "y": 291.33333333333326
+            }
+        },
+        "D:/Stuff/code/Babel/Project/dungeon_map.tmj#PuddleTileset": {
+            "scaleInDock": 1
+        },
+        "D:/Stuff/code/Babel/Project/dungeon_map.tmj#RoomTileset": {
+            "scaleInDock": 1
         }
     },
     "last.imagePath": "D:/Stuff/code/Babel/Project/data/sprites",
@@ -31,6 +49,7 @@
     ],
     "project": "test_rooms.tiled-project",
     "recentFiles": [
+        "D:/Stuff/code/Babel/Project/dungeon_map.tmj",
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx",
         "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx",
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj"

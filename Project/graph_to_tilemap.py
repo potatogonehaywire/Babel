@@ -20,6 +20,7 @@ Edge format:
 """
 
 import json
+import random
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -28,12 +29,33 @@ ROOM_H      = 7   # default room height (tiles)
 MAP_PADDING = 3    # empty tile border around the whole map
 TILE_SIZE   = 32  # pixels per tile
 
-# Tile IDs (1-based; 0 = empty).
-# Adjust to match your own tileset.
-TILE_EMPTY    = 0
-TILE_FLOOR    = 18
-TILE_WALL     = 19
-TILE_CORRIDOR = 18   # corridors use the same tile as floor
+# Tile IDs
+TILE_EMPTY         = 0
+TILE_ROOM_FLOOR    = 3
+TILE_ROOM_WALL     = 4
+TILE_CORRIDOR_FLOOR = 3
+TILE_CORRIDOR_WALL  = 4
+
+# ── Puddle tileset ────────────────────────────────────────────────────────────
+# PUDDLE_TILESET_FIRSTGID must be higher than the last tile ID in the main
+# tileset (e.g. if your main tileset has 4 tiles, use firstgid=5).
+PUDDLE_TILESET_FIRSTGID = 5
+ 
+# GIDs of the puddle tiles within the puddle tileset.
+# GID = PUDDLE_TILESET_FIRSTGID + (0-based index of the tile in that tileset)
+# e.g. if the puddle tileset has 3 puddle tiles at positions 0, 1, 2:
+PUDDLE_TILE_GIDS = [
+    PUDDLE_TILESET_FIRSTGID,   # puddle variant 1
+    PUDDLE_TILESET_FIRSTGID + 2,   # puddle variant 2
+    PUDDLE_TILESET_FIRSTGID + 4,   # puddle variant 3
+    PUDDLE_TILESET_FIRSTGID + 6,   # puddle variant 3
+    PUDDLE_TILESET_FIRSTGID + 8,   # puddle variant 3
+]
+ 
+# Probability (0.0–1.0) that any given interior floor tile gets a puddle.
+PUDDLE_DENSITY = 0.5
+
+RANDOM_SEED = None
 
 # Output paths
 GRAPH_JSON_PATH = "graph.json"
@@ -86,9 +108,18 @@ origin_y = -min_y + MAP_PADDING
 map_w    = (max_x - min_x) + MAP_PADDING * 2
 map_h    = (max_y - min_y) + MAP_PADDING * 2
 
-# Initialise two flat tile arrays (row-major, length = map_w * map_h)
-corridors = [TILE_EMPTY] * (map_w * map_h)
-rooms     = [TILE_EMPTY] * (map_w * map_h)
+corridor_floors = [TILE_EMPTY] * (map_w * map_h)
+corridor_walls  = [TILE_EMPTY] * (map_w * map_h)
+room_floors = [TILE_EMPTY] * (map_w * map_h)
+room_walls = [TILE_EMPTY] * (map_w * map_h)
+puddles = [TILE_EMPTY] * (map_w * map_h)
+
+# A set of all tile coords occupied by any room (interior + wall border).
+# Used to clip corridors so they don't overlap room tiles.
+room_tiles = set()
+room_wall_tiles = set()   # only the wall border tiles
+room_interior_tiles = set()   # only the interior floor tiles
+
 
 def idx(x, y):
     return y * map_w + x
@@ -99,46 +130,168 @@ def fill_rect(grid, x, y, w, h, tile_id):
             if 0 <= col < map_w and 0 <= row < map_h:
                 grid[idx(col, row)] = tile_id
 
-def hollow_rect(grid, x, y, w, h, floor_id, wall_id):
-    fill_rect(grid, x, y, w, h, floor_id)             # interior floor
-    fill_rect(grid, x,         y,         w, 1, wall_id)  # top
-    fill_rect(grid, x,         y + h - 1, w, 1, wall_id)  # bottom
-    fill_rect(grid, x,         y,         1, h, wall_id)  # left
-    fill_rect(grid, x + w - 1, y,         1, h, wall_id)  # right
 
-def draw_l_corridor(grid, ax, ay, bx, by, tile_id):
-    """Horizontal from (ax,ay) to (bx,ay), then vertical to (bx,by)."""
-    for col in range(min(ax, bx), max(ax, bx) + 1):   # horizontal segment
-        if 0 <= col < map_w and 0 <= ay < map_h:
-            grid[idx(col, ay)] = tile_id
-    for row in range(min(ay, by), max(ay, by) + 1):   # vertical segment
-        if 0 <= bx < map_w and 0 <= row < map_h:
-            grid[idx(bx, row)] = tile_id
+for n in nodes:
+    rx = n["x"] + origin_x
+    ry = n["y"] + origin_y
+    rw = n["w"]
+    rh = n["h"]
+ 
+    # Interior floor (shrink by 1 on each side to leave room for walls)
+    fill_rect(room_floors, rx + 1, ry + 1, rw - 2, rh - 2, TILE_ROOM_FLOOR)
+ 
+    # Wall border (top, bottom, left, right edges)
+    fill_rect(room_walls, rx,          ry,          rw, 1,  TILE_ROOM_WALL)  # top
+    fill_rect(room_walls, rx,          ry + rh - 1, rw, 1,  TILE_ROOM_WALL)  # bottom
+    fill_rect(room_walls, rx,          ry,          1,  rh, TILE_ROOM_WALL)  # left
+    fill_rect(room_walls, rx + rw - 1, ry,          1,  rh, TILE_ROOM_WALL)  # right
+ 
+    # Record every tile this room occupies (interior + walls)
+    for row in range(ry, ry + rh):
+        for col in range(rx, rx + rw):
+            room_tiles.add((col, row))
+ 
+# ── Corridor helpers ──────────────────────────────────────────────────────────
+ 
+def set_corridor_floor(x, y):
+    """Place a corridor floor tile only if this cell is not part of any room."""
+    if 0 <= x < map_w and 0 <= y < map_h and (x, y) not in room_tiles:
+        corridor_floors[idx(x, y)] = TILE_CORRIDOR_FLOOR
+ 
+def add_corridor_walls(corridor_cells):
+    """
+    Given a set of (x,y) corridor floor cells, paint wall tiles on any
+    orthogonally adjacent empty cell that is not already a room tile or
+    another corridor floor cell.
+    """
+    for (cx, cy) in corridor_cells:
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1),
+                       (-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            nx, ny = cx + dx, cy + dy
+            if not (0 <= nx < map_w and 0 <= ny < map_h):
+                continue
+            if (nx, ny) in room_tiles:
+                continue
+            if (nx, ny) in corridor_cells:
+                continue
+            corridor_walls[idx(nx, ny)] = TILE_CORRIDOR_WALL
+ 
+def room_exit_point(node, toward_x, toward_y):
+    """
+    Return the tile just outside the room wall that faces (toward_x, toward_y).
+    The corridor starts here rather than at the room centre.
+ 
+    Picks the wall face (top/bottom/left/right) that is closest to the
+    target point, then steps one tile outside that wall.
+    """
+    rx = node["x"] + origin_x
+    ry = node["y"] + origin_y
+    rw = node["w"]
+    rh = node["h"]
+ 
+    cx = rx + rw // 2   # room centre in map-space
+    cy = ry + rh // 2
+ 
+    dx = toward_x - cx
+    dy = toward_y - cy
+ 
+    # Choose the dominant axis; break ties by whichever keeps corridors tidy
+    if abs(dx) >= abs(dy):
+        # Exit through left or right wall; use centre row of room
+        if dx >= 0:
+            return rx + rw, cy        # right wall, step one tile outside
+        else:
+            return rx - 1, cy         # left wall
+    else:
+        # Exit through top or bottom wall; use centre column of room
+        if dy >= 0:
+            return cx, ry + rh        # bottom wall
+        else:
+            return cx, ry - 1         # top wall
+ 
+def draw_l_corridor(ax, ay, bx, by):
+    """
+    Draw an L-shaped corridor: horizontal from (ax,ay) to (bx,ay),
+    then vertical from (bx,ay) to (bx,by).
+    Skips any cell occupied by a room.
+    Returns the set of corridor floor cells painted.
+    """
+    cells = set()
+    for col in range(min(ax, bx), max(ax, bx) + 1):
+        set_corridor_floor(col, ay)
+        if (col, ay) not in room_tiles:
+            cells.add((col, ay))
+    for row in range(min(ay, by), max(ay, by) + 1):
+        set_corridor_floor(bx, row)
+        if (bx, row) not in room_tiles:
+            cells.add((bx, row))
+    return cells
+ 
+# corridors
+all_corridor_cells = set()
 
-# Paint corridors
 for id_a, id_b in edges:
     a = node_by_id.get(str(id_a))
     b = node_by_id.get(str(id_b))
     if not a or not b:
-        print(f"  Warning: edge [{id_a}, {id_b}] references unknown node – skipped.")
+        print(f"  Warning: edge [{id_a}, {id_b}] references unknown node skipped.")
         continue
+ 
+    # Centre of each room in map-space (used to pick exit face)
     cax = a["x"] + a["w"] // 2 + origin_x
     cay = a["y"] + a["h"] // 2 + origin_y
     cbx = b["x"] + b["w"] // 2 + origin_x
     cby = b["y"] + b["h"] // 2 + origin_y
-    draw_l_corridor(corridors, cax, cay, cbx, cby, TILE_CORRIDOR)
+ 
+    # Exit points: one tile outside the room wall facing the other room
+    ax_exit, ay_exit = room_exit_point(a, cbx, cby)
+    bx_exit, by_exit = room_exit_point(b, cax, cay)
+ 
+    cells = draw_l_corridor(ax_exit, ay_exit, bx_exit, by_exit)
+    all_corridor_cells |= cells
 
-# Paint rooms (hollow rectangles)
-for n in nodes:
-    hollow_rect(
-        rooms,
-        n["x"] + origin_x,
-        n["y"] + origin_y,
-        n["w"], n["h"],
-        TILE_FLOOR, TILE_WALL
-    )
+add_corridor_walls(all_corridor_cells)
+
+ORTHO = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+ 
+for (wx, wy) in list(room_wall_tiles):
+    for dx, dy in ORTHO:
+        nx, ny = wx + dx, wy + dy
+        if (nx, ny) in all_corridor_cells:
+            # Replace wall tile with floor tile on the room_walls layer
+            room_walls[idx(wx, wy)] = TILE_EMPTY
+            room_floors[idx(wx, wy)] = TILE_ROOM_FLOOR
+            break   # only need one adjacent corridor cell to open the wall
+
+# ── Paint puddles ─────────────────────────────────────────────────────────────
+# Puddle tiles are 2×2 room tiles in size, so:
+#   - only place on even-coordinate cells to avoid overlap
+#   - check that the full 2×2 footprint stays within room interior tiles
+
+for (px, py) in room_interior_tiles:
+    if px % 2 != 0 or py % 2 != 0:
+        continue   # skip odd coords to prevent puddles overlapping each other
+    # Check all 4 cells the puddle would cover are interior floor
+    footprint = [(px, py), (px+1, py), (px, py+1), (px+1, py+1)]
+    if not all(cell in room_interior_tiles for cell in footprint):
+        continue   # too close to a wall
+    if random.random() < PUDDLE_DENSITY:
+        puddles[idx(px, py)] = random.choice(PUDDLE_TILE_GIDS)
+
 
 # ── Step 3: Build the Tiled JSON map structure ────────────────────────────────
+def make_layer(layer_id, name, data):
+    return {
+        "id": layer_id,
+        "name": name,
+        "type": "tilelayer",
+        "x": 0, "y": 0,
+        "width": map_w,
+        "height": map_h,
+        "visible": True,
+        "opacity": 1,
+        "data": data,
+    }
 
 tiled_map = {
     "version": "1.10",
@@ -155,70 +308,18 @@ tiled_map = {
     "nextobjectid": 1,
     # list o f tilesets
     "tilesets": [
-        {
-            "firstgid": 1,
-            "name": "RoomTileset",
-            "tilewidth": TILE_SIZE,
-            "tileheight": TILE_SIZE,
-            "spacing": 0,
-            "margin": 0,
-            "tilecount": 20,
-            "columns": 4,
-            "imagewidth": TILE_SIZE * 4,
-            "imageheight": TILE_SIZE * 5,
-            # tileset image
-            "image": "data/sprites/tile_textures.png",
-        },
-        {
-            "firstgid": 2,
-            "name": "RoomTileset",
-            "tilewidth": TILE_SIZE * 2,
-            "tileheight": TILE_SIZE * 2,
-            "spacing": 0,
-            "margin": 0,
-            "tilecount": 20,
-            "columns": 4,
-            "imagewidth": TILE_SIZE * 2,
-            "imageheight": TILE_SIZE * 10,
-            "image": "data/sprites/puddles.png",
-        }
+        {"firstgid": 1, "source": "data/sprites/room_tileset.tsx"},
+        {"firstgid": PUDDLE_TILESET_FIRSTGID, "source": "data/sprites/puddles_tileset.tsx"}
     ],
     "layers": [
-        {
-            "id": 1,
-            "name": "Floor",
-            "type": "tilelayer",
-            "x": 0, "y": 0,
-            "width": map_w,
-            "height": map_h,
-            "visible": True,
-            "opacity": 1,
-            "data": corridors,
-        },
-        {
-            "id": 2,
-            "name": "Wall",
-            "type": "tilelayer",
-            "x": 0, "y": 0,
-            "width": map_w,
-            "height": map_h,
-            "visible": True,
-            "opacity": 1,
-            "data": rooms,
-        },
-        {
-            "id": 3,
-            "name": "Puddle",
-            "type": "tilelayer",
-            "x": 0, "y": 0,
-            "width": map_w,
-            "height": map_h,
-            "visible": True,
-            "opacity": 1,
-            "data": rooms,
-        },
+        make_layer(1, "Corridor Floors", corridor_floors),
+        make_layer(2, "Corridor Walls", corridor_walls),
+        make_layer(3, "Room Floors", room_floors),
+        make_layer(4, "Room Walls", room_walls),
+        make_layer(5, "Puddles", puddles),
     ],
 }
+
 
 with open(MAP_PATH, "w") as f:
     json.dump(tiled_map, f, indent=2)
