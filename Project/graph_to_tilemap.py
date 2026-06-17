@@ -1,31 +1,9 @@
-"""
-export_graph.py
-
-Exports your graph to:
-  1. graph.json       — the raw graph data
-  2. dungeon_map.tmj  — a ready-to-open Tiled map file
-
-Just open dungeon_map.tmj in Tiled. No Tiled scripting required.
-
-Node format:
-    Each node must have:
-      - "id"  : unique string or int identifier
-      - "x"   : tile-space X of the room's top-left corner
-      - "y"   : tile-space Y of the room's top-left corner
-      - "w"   : room width  in tiles  (optional, defaults to ROOM_W)
-      - "h"   : room height in tiles  (optional, defaults to ROOM_H)
-
-Edge format:
-    Each edge is a pair [source_id, target_id].
-"""
-
 import json
 import random
 
-# ── Configuration ─────────────────────────────────────────────────────────────
 
-ROOM_W      = 6  # default room width  (tiles)
-ROOM_H      = 7   # default room height (tiles)
+ROOM_W      = 8  # default room width  (tiles)
+ROOM_H      = 9   # default room height (tiles)
 MAP_PADDING = 3    # empty tile border around the whole map
 TILE_SIZE   = 32  # pixels per tile
 
@@ -36,20 +14,15 @@ TILE_ROOM_WALL     = 4
 TILE_CORRIDOR_FLOOR = 3
 TILE_CORRIDOR_WALL  = 4
 
-# ── Puddle tileset ────────────────────────────────────────────────────────────
-# PUDDLE_TILESET_FIRSTGID must be higher than the last tile ID in the main
-# tileset (e.g. if your main tileset has 4 tiles, use firstgid=5).
-PUDDLE_TILESET_FIRSTGID = 5
+
+PUDDLE_TILESET_FIRSTGID = 17
  
-# GIDs of the puddle tiles within the puddle tileset.
-# GID = PUDDLE_TILESET_FIRSTGID + (0-based index of the tile in that tileset)
-# e.g. if the puddle tileset has 3 puddle tiles at positions 0, 1, 2:
 PUDDLE_TILE_GIDS = [
     PUDDLE_TILESET_FIRSTGID,   # puddle variant 1
-    PUDDLE_TILESET_FIRSTGID + 2,   # puddle variant 2
-    PUDDLE_TILESET_FIRSTGID + 4,   # puddle variant 3
-    PUDDLE_TILESET_FIRSTGID + 6,   # puddle variant 3
-    PUDDLE_TILESET_FIRSTGID + 8,   # puddle variant 3
+    PUDDLE_TILESET_FIRSTGID + 5,   # puddle variant 2
+    PUDDLE_TILESET_FIRSTGID + 10,   # puddle variant 3
+    PUDDLE_TILESET_FIRSTGID + 15,   # puddle variant 3
+    PUDDLE_TILESET_FIRSTGID + 20,   # puddle variant 3
 ]
  
 # Probability (0.0–1.0) that any given interior floor tile gets a puddle.
@@ -59,11 +32,10 @@ RANDOM_SEED = None
 
 # Output paths
 GRAPH_JSON_PATH = "graph.json"
-MAP_PATH        = "dungeon_map.tmj"
+MAP_PATH = "dungeon_map.tmj"
 
-# ── Your graph data ───────────────────────────────────────────────────────────
-# Replace these with your actual nodes and edges.
 
+# graph data
 nodes = [
     {"id": "A", "x": 2,  "y": 2},
     {"id": "B", "x": 14, "y": 2},
@@ -80,7 +52,6 @@ edges = [
     ["D", "E"],
 ]
 
-# ── Normalise nodes ───────────────────────────────────────────────────────────
 
 for node in nodes:
     node.setdefault("w", ROOM_W)
@@ -88,13 +59,10 @@ for node in nodes:
 
 node_by_id = {str(n["id"]): n for n in nodes}
 
-# ── Step 1: Export graph.json ─────────────────────────────────────────────────
-
 with open(GRAPH_JSON_PATH, "w") as f:
     json.dump({"nodes": nodes, "edges": edges}, f, indent=2)
-print(f"[1/2] Exported graph  → '{GRAPH_JSON_PATH}'")
+print(f"Exported graph '{GRAPH_JSON_PATH}'")
 
-# ── Step 2: Build the tile grid ───────────────────────────────────────────────
 
 # Compute bounding box
 min_x = min(n["x"] for n in nodes)
@@ -124,6 +92,7 @@ room_interior_tiles = set()   # only the interior floor tiles
 def idx(x, y):
     return y * map_w + x
 
+
 def fill_rect(grid, x, y, w, h, tile_id):
     for row in range(y, y + h):
         for col in range(x, x + w):
@@ -141,22 +110,22 @@ for n in nodes:
     fill_rect(room_floors, rx + 1, ry + 1, rw - 2, rh - 2, TILE_ROOM_FLOOR)
  
     # Wall border (top, bottom, left, right edges)
-    fill_rect(room_walls, rx,          ry,          rw, 1,  TILE_ROOM_WALL)  # top
-    fill_rect(room_walls, rx,          ry + rh - 1, rw, 1,  TILE_ROOM_WALL)  # bottom
-    fill_rect(room_walls, rx,          ry,          1,  rh, TILE_ROOM_WALL)  # left
-    fill_rect(room_walls, rx + rw - 1, ry,          1,  rh, TILE_ROOM_WALL)  # right
+    fill_rect(room_walls, rx,ry,rw, 1,  TILE_ROOM_WALL)  # top
+    fill_rect(room_walls, rx,ry + rh - 1, rw, 1, TILE_ROOM_WALL)  # bottom
+    fill_rect(room_walls, rx,ry,1,rh, TILE_ROOM_WALL)  # left
+    fill_rect(room_walls, rx + rw - 1, ry, 1, rh, TILE_ROOM_WALL)  # right
  
     # Record every tile this room occupies (interior + walls)
     for row in range(ry, ry + rh):
         for col in range(rx, rx + rw):
             room_tiles.add((col, row))
  
-# ── Corridor helpers ──────────────────────────────────────────────────────────
  
 def set_corridor_floor(x, y):
     """Place a corridor floor tile only if this cell is not part of any room."""
     if 0 <= x < map_w and 0 <= y < map_h and (x, y) not in room_tiles:
         corridor_floors[idx(x, y)] = TILE_CORRIDOR_FLOOR
+ 
  
 def add_corridor_walls(corridor_cells):
     """
@@ -175,6 +144,7 @@ def add_corridor_walls(corridor_cells):
             if (nx, ny) in corridor_cells:
                 continue
             corridor_walls[idx(nx, ny)] = TILE_CORRIDOR_WALL
+ 
  
 def room_exit_point(node, toward_x, toward_y):
     """
@@ -209,6 +179,7 @@ def room_exit_point(node, toward_x, toward_y):
         else:
             return cx, ry - 1         # top wall
  
+ 
 def draw_l_corridor(ax, ay, bx, by):
     """
     Draw an L-shaped corridor: horizontal from (ax,ay) to (bx,ay),
@@ -226,6 +197,7 @@ def draw_l_corridor(ax, ay, bx, by):
         if (bx, row) not in room_tiles:
             cells.add((bx, row))
     return cells
+ 
  
 # corridors
 all_corridor_cells = set()
@@ -263,11 +235,8 @@ for (wx, wy) in list(room_wall_tiles):
             room_floors[idx(wx, wy)] = TILE_ROOM_FLOOR
             break   # only need one adjacent corridor cell to open the wall
 
-# ── Paint puddles ─────────────────────────────────────────────────────────────
-# Puddle tiles are 2×2 room tiles in size, so:
-#   - only place on even-coordinate cells to avoid overlap
-#   - check that the full 2×2 footprint stays within room interior tiles
 
+# paint puddles
 for (px, py) in room_interior_tiles:
     if px % 2 != 0 or py % 2 != 0:
         continue   # skip odd coords to prevent puddles overlapping each other
@@ -279,7 +248,8 @@ for (px, py) in room_interior_tiles:
         puddles[idx(px, py)] = random.choice(PUDDLE_TILE_GIDS)
 
 
-# ── Step 3: Build the Tiled JSON map structure ────────────────────────────────
+
+# build the tilemap
 def make_layer(layer_id, name, data):
     return {
         "id": layer_id,
@@ -306,7 +276,7 @@ tiled_map = {
     "infinite": False,
     "nextlayerid": 3,
     "nextobjectid": 1,
-    # list o f tilesets
+    # list of tilesets
     "tilesets": [
         {"firstgid": 1, "source": "data/sprites/room_tileset.tsx"},
         {"firstgid": PUDDLE_TILESET_FIRSTGID, "source": "data/sprites/puddles_tileset.tsx"}
@@ -321,10 +291,9 @@ tiled_map = {
 }
 
 
+# export map
 with open(MAP_PATH, "w") as f:
     json.dump(tiled_map, f, indent=2)
 
-print(f"[2/2] Generated map   → '{MAP_PATH}'")
-print(f"      Map size: {map_w} × {map_h} tiles")
-print(f"      Rooms: {len(nodes)}  |  Corridors: {len(edges)}")
-print(f"\nOpen '{MAP_PATH}' directly in Tiled.")
+print(f" Generated map: '{MAP_PATH}'")
+print(f"Rooms: {len(nodes)} | Corridors: {len(edges)}")
