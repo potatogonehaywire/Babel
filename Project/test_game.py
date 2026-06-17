@@ -79,49 +79,63 @@ class Guest(Character):
         self.hurtbox_radius = 300
         self.change_direction()
         self.wall_list = wall_list
+        self.walking_to_exit = False
     
         
-        
     def update(self, delta_time: float = 1 / 60):
-
-        self.wait_time -= delta_time
-
-        if self.wait_time <= 0:
-            hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
-            if hitting_wall:
-                for wall in hitting_wall:
-                    diff_x = wall.center_x - self.center_x
-                    diff_y = wall.center_y - self.center_y
-                    direction_x = -diff_x / abs(diff_x)
-                    direction_y = -diff_y / abs(diff_y)
-                    self.walk_away_from_wall(direction_x, direction_y)
-            self.move()
-
         
+        if not self.walking_to_exit:
+
+            self.wait_time -= delta_time
+    
+            if self.wait_time <= 0:
+                hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
+                if hitting_wall:
+                    for wall in hitting_wall:
+                        diff_x = wall.center_x - self.center_x
+                        diff_y = wall.center_y - self.center_y
+                        wall_direction_x = diff_x / abs(diff_x)
+                        wall_direction_y = diff_y / abs(diff_y)
+                        self.walk_away_from_wall(wall_direction_x, wall_direction_y)
+                self.wander()
+
+    
     def walk_away_from_wall(self, x_direction, y_direction):
-        self.direction[0] = x_direction
-        self.direction[1] = y_direction
+        """walk in the opposite direction of the wall"""
+        # set direction to the opposite of the wall's direction
+        self.direction[0] = -x_direction
+        self.direction[1] = -y_direction
+        # set random distance
         self.to_move_x = random.randint(200, 500)
         self.to_move_y = random.randint(200, 500)
+        # make new target position based on current_location, direction and distance
         self.target_x = self.to_move_x * self.direction[0] + self.center_x
         self.target_y = self.to_move_y * self.direction[1] + self.center_y
     
     
     def change_direction(self):
+        """change wandering direction randomly"""
+        # set random direction
         self.direction[0] = random.choice([-1,1])
-        self.direction[1] = random.choice([-1,1])        
+        self.direction[1] = random.choice([-1,1])
+        # set random distance
         self.to_move_x = random.randint(200, 500)
         self.to_move_y = random.randint(200, 500)
+        # make new target position based on current location, random direction and distance
         self.target_x = self.to_move_x * self.direction[0] + self.center_x
         self.target_y = self.to_move_y * self.direction[1] + self.center_y        
     
 
     def change_wait_time(self):
-        self.wait_time = random.uniform(1,2)
+        """ set how long the Guest stays idle for"""
+        # random time between 1 and 4 seconds
+        self.wait_time = random.uniform(1,4)
+        # change guest direction to default so it looks better
         self.direction = [-1,-1]
     
 
-    def move(self):
+    def wander(self):
+        """ wander towards target position"""
         if abs(self.center_x - self.target_x) < 10:
             if abs(self.center_y - self.target_y) < 10:
                 self.change_wait_time()
@@ -141,7 +155,7 @@ class Guest(Character):
     
     
     def is_hit(self):
-        print("ouch")
+        self.walking_to_exit = True
         
         
     def hurtbox_in_range(self):
@@ -182,25 +196,43 @@ class Librarian(Guest):
         super().__init__(sprite_frames, scale, frame_duration, x, y, player, wall_list)
         self.speed = 3
         self.detection_radius = 500
+        self.hit_timer = 0.2
+        self.hit_player = False
 
     def update(self, delta_time : float = 1/60):
-        distances = self.check_distance()
-        hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
-        if distances[0] < self.detection_radius:
-            if not hitting_wall:
-                self.center_x += (distances[1] / distances[0]) * self.speed * 2
-                self.center_y += (distances[2] / distances[0]) * self.speed * 2
+        if not self.walking_to_exit:
+            distances = self.check_distance()
+            hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
+            if distances[0] < self.detection_radius:
+                if not hitting_wall:
+                    self.center_x += (distances[1] / distances[0]) * self.speed * 2
+                    self.center_y += (distances[2] / distances[0]) * self.speed * 2
+    
+            else:
+                self.wait_time -= delta_time
+                if self.wait_time <= 0:
+                    if hitting_wall:
+                        for wall in hitting_wall:
+                            diff_x = wall.center_x - self.center_x
+                            diff_y = wall.center_y - self.center_y
+                            direction_x = -diff_x / abs(diff_x)
+                            direction_y = -diff_y / abs(diff_y)
+                            self.walk_away_from_wall(direction_x, direction_y)
+                    self.wander()
+                
+                
+    def player_hit(self, delta_time : float = 1/60):
+        hitting_player = arcade.check_for_collision(self, self.player)
+        if hitting_player:
+            self.hit_timer -= delta_time
+            if self.hit_timer <= 0:
+                self.hit_timer = 0.4
+                return True
         else:
-            self.wait_time -= delta_time
-            if self.wait_time <= 0:
-                if hitting_wall:
-                    for wall in hitting_wall:
-                        diff_x = wall.center_x - self.center_x
-                        diff_y = wall.center_y - self.center_y
-                        direction_x = -diff_x / abs(diff_x)
-                        direction_y = -diff_y / abs(diff_y)
-                        self.walk_away_from_wall(direction_x, direction_y)
-                self.move()
+            self.hit_timer = 0.4
+        
+        return False
+
 
 class MyGame(arcade.Window):
     """ Our custom Window Class"""
@@ -276,7 +308,7 @@ class MyGame(arcade.Window):
         self.guest_list.append(self.guest)
         
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1000, 4964, self.player, self.wall_list)
+        self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1200, 4964, self.player, self.wall_list)
         self.librarian_list.append(self.librarian)
         
         self.water_level = 0        
@@ -420,13 +452,17 @@ class MyGame(arcade.Window):
         
         # Call update on all sprites
         self.player_list.update()
-        self.player_list.update_animation(delta_time)
+        self.player_list.update_animation()
         self.guest_list.update()
-        self.guest_list.update_animation(delta_time)
+        self.guest_list.update_animation()
         self.librarian_list.update()
-        self.librarian_list.update_animation(delta_time)
+        self.librarian_list.update_animation()
         self.fire_list.update()
         self.small_pud_list.update()
+        
+        for librarian in self.librarian_list:
+            if librarian.player_hit():
+                self.setup()
 
         self.bucket.texture = self.buckets_textures[self.water_level]
         
@@ -525,6 +561,7 @@ class MyGame(arcade.Window):
             case arcade.key.S:
                 self.player.change_y = -MOVE_SPEED
                 self.player.direction[1] = -1
+    
     
     def on_key_release(self, key, modifiers):
         """Called whenever a user releases a key"""
@@ -736,7 +773,6 @@ class MyGame(arcade.Window):
         else:
             self.cursor_sprite.alpha = 100
             self.cursor_sprite.scale = 1    
-
 
 
 def main():
