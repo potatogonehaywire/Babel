@@ -222,6 +222,8 @@ class Librarian(Guest):
                 
                 
     def player_hit(self, delta_time : float = 1/60):
+        """check if librarian is hitting player, 
+        only returns True if they have been colliding for a while to give player time to dodge"""
         hitting_player = arcade.check_for_collision(self, self.player)
         if hitting_player:
             self.hit_timer -= delta_time
@@ -267,6 +269,7 @@ class MyGame(arcade.Window):
         
         # Set up the player info
         self.player = None
+        self.level = 1
         self.setup()
         
         self.bucket = None
@@ -290,6 +293,7 @@ class MyGame(arcade.Window):
         self.hovered_guests = []
         self.hovered_puddles = []
         self.correct_tool = False
+        self.guests_hit = 0
         # Sprite lists
         self.player_list = arcade.SpriteList()
         self.guest_list = arcade.SpriteList()
@@ -303,17 +307,22 @@ class MyGame(arcade.Window):
         # Set up the player
         self.player_list.append(self.player)
         
+        # set up guests
         self.guest_textures = arcade.load_spritesheet("data\sprites\guest.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         self.guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, 896, 4964, self.player, self.wall_list)
         self.guest_list.append(self.guest)
         
+        # set up librarians
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1200, 4964, self.player, self.wall_list)
         self.librarian_list.append(self.librarian)
         
         self.water_level = 0        
         
-        map_name = "data/maps/test_map.tmj"
+        if self.level == 1:
+            map_name = "data/maps/test_map.tmj"
+        if self.level == 2:
+            map_name = "data/project_work/test_hexagon.tmj"
         
         # Read in the tiled map
         self.tile_map = arcade.load_tilemap(map_name, scaling=TILE_SCALING)
@@ -379,12 +388,13 @@ class MyGame(arcade.Window):
             texture=arcade.load_spritesheet("data/sprites/restart_button.png", sprite_width = 64, sprite_height = 64, columns = 1, count = 1)[0],
             scale = 0.7, center_x = 1500, center_y = 935)
         
+        # restart button
         self.restart_bgs = arcade.SpriteList()
         self.restart_texture = arcade.load_spritesheet("data/sprites/restart_bg.png", sprite_width = 190, sprite_height = 60, columns = 1, count = 2)
         self.restart_normal = arcade.Sprite(texture = self.restart_texture[0], center_x = 1560, center_y = 935)
         self.restart_bgs.append(self.restart_normal)
         
-        
+        # initialize fire & small water puddle sprites
         self.fire_list = arcade.SpriteList()
         self.fire_sprites = arcade.load_spritesheet("data/sprites/fire.png", sprite_width = 32, sprite_height = 32, columns = 4, count = 16)
         
@@ -395,6 +405,7 @@ class MyGame(arcade.Window):
         self.puddles_touching_fire = []
         self.slowed_fire_timer = {}
         
+        self.percent_level_burnt = 0
         
         # Set the background color to what is specified in the map
         if self.tile_map.background_color:
@@ -424,7 +435,8 @@ class MyGame(arcade.Window):
         
         # select separate camera to create GUI
         self.camera_gui.use()
-
+        
+        # draw hotbar 
         arcade.draw_rectangle_filled(SCREEN_WIDTH/2, 150, 530, 110, (200, 200, 200))
         
         arcade.draw_rectangle_filled(630 + self.current_item * 105, 150, 110, 110, (230,190,10))
@@ -435,15 +447,18 @@ class MyGame(arcade.Window):
         
             arcade.draw_rectangle_filled(location + i*105, 150, 100, 100, (20, 20, 20))
         
-        arcade.draw_text(f"Percentage of level burnt: {(len(self.tiles_on_fire)/len(self.burnable_tiles) * 100):.2f}%", 30, 990, arcade.color.WHITE, 25)
+        # display text
+        arcade.draw_text(f"Percentage of level burnt: {self.percent_level_burnt:.2f}%", 30, 990, arcade.color.WHITE, 25)
         arcade.draw_text(f"Puddles Wiped: {int((self.initial_puddles - len(self.puddle_list)))} / {int(self.initial_puddles)}", 30, 930, arcade.color.WHITE, 25)
         arcade.draw_text(f"Time Left: {self.time_left:.2f} s", 1380, 980, arcade.color.WHITE, 25)
-
+        
+        # draw restart button
         self.restart_bgs.draw(pixelated = True)
         arcade.draw_text("Restart", 1530, 920, arcade.color.WHITE, 25)
         self.restart_sprite.draw(pixelated = True)
         self.hotbar_sprite_list.draw(pixelated = True)
         
+        # draw cursor sprite
         self.cursor_sprite.draw(pixelated = True)
         
         
@@ -460,14 +475,18 @@ class MyGame(arcade.Window):
         self.fire_list.update()
         self.small_pud_list.update()
         
+        # check if librarian hit player
         for librarian in self.librarian_list:
             if librarian.player_hit():
                 self.setup()
-
+        
+        # set bucket texture based on current water level
         self.bucket.texture = self.buckets_textures[self.water_level]
         
+        # change cursor sprite depending on the item used
         self.cursor_sprite.texture = self.cursor_textures[self.current_item]
         
+        # change torch sprite and start counting time when fire is used
         if self.used_fire:
             self.torch.texture = self.torch_textures[1]
             self.fire_spread_time -= delta_time
@@ -483,21 +502,29 @@ class MyGame(arcade.Window):
         # move screen
         self.scroll_to_player()
         
+        # spread fire at random intervals
         if self.fire_spread_time <= 0:
             self.spread_fire()
                     
-                    
+        # if the fire is touching a small puddle
         for puddle in self.puddles_touching_fire:
+            # count the time where the fire slows down 
             self.slowed_fire_timer[puddle] -= delta_time
+            # if time runs out for the puddle
             if self.slowed_fire_timer[puddle] <= 0:
                 keys = [key for key, val in self.slowed_fire_tiles.items() if val == puddle]
+                # remove puddle and stop slowing down the fire
                 for key in keys:
                     key.remove_from_sprite_lists()
                     del self.slowed_fire_tiles[key]
-                    
+        
+        # update how much of the level got burnt
+        self.percent_level_burnt = len(self.tiles_on_fire)/len(self.burnable_tiles) * 100
+        
+        # upate cursor 
         self.change_cursor()
         
-        
+        # player loses game if the fire takes too long to spread, doesn't restart game fully
         if self.time_left <= 0:
             self.lost_game = True
         
@@ -561,6 +588,13 @@ class MyGame(arcade.Window):
             case arcade.key.S:
                 self.player.change_y = -MOVE_SPEED
                 self.player.direction[1] = -1
+            
+            case arcade.key.L:
+                if self.level == 1 and self.guests_hit >= 2 and self.percent_level_burnt > 95:
+                    self.level = 2
+                else:
+                    self.level = 1
+                self.setup()
     
     
     def on_key_release(self, key, modifiers):
@@ -596,6 +630,7 @@ class MyGame(arcade.Window):
                             # slap guest if the guest is in range
                             if guest.hurtbox_in_range():
                                 guest.is_hit()
+                                self.guests_hit += 1
                 # if using mop
                 elif self.current_item == 1:
                     
@@ -613,18 +648,6 @@ class MyGame(arcade.Window):
                             sprite.remove_from_sprite_lists()
                             del self.puddle_coords[sprite]
                             
-                        # other_puddles = []
-                        # other_puddle_coords = {}
-                        
-                        # # find adjacent water puddles
-                        # for pud, coords in self.puddle_coords.items(): 
-                        #     if abs(self.clicked_tile[0] - coords[1][0]) <= 1 and abs(self.clicked_tile[1] - coords[1][1]) <= 1 and self.clicked_tile != coords[1]:
-                        #         other_puddles.append(pud)
-                        
-                        # #remove adjacent puddles
-                        # for puddle in other_puddles:
-                        #     puddle.remove_from_sprite_lists()
-                        #     del self.puddle_coords[puddle]
                     else:
                         hovered_small_pud = arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
                         # if hovering over a small puddle
@@ -656,10 +679,12 @@ class MyGame(arcade.Window):
 
 
     def on_mouse_motion(self, x, y, dx, dy):
+        """ updates where the cursor is on the world map instead of the screen"""
         self.mouse_x = x
         self.mouse_y = y
         self.cursor_sprite.center_x = x
         self.cursor_sprite.center_y = y
+        # check if mouse if hovering over the restart button
         hovered_buttons = arcade.get_sprites_at_point((x,y), self.restart_bgs)
         if hovered_buttons:
             self.restart_normal.texture = self.restart_texture[1]
@@ -677,18 +702,21 @@ class MyGame(arcade.Window):
 
 
     def spawn_fire(self, x, y):
+        """ spawns fire using inputted location"""
         fire = arcade.Sprite()
         fire.texture = self.fire_sprites[random.randrange(0, len(self.fire_sprites))]
         fire.scale = random.randrange(0, 7)
         fire.center_x = x + random.randrange(-15 * TILE_SCALING, 15 * TILE_SCALING)
         fire.center_y = y + random.randrange(-15 * TILE_SCALING, 15 * TILE_SCALING)
         self.fire_list.append(fire)
+        # lose game if spawned fire in a large puddle
         colliding_bigpuddle = arcade.check_for_collision_with_list(fire, self.puddle_list)
         if colliding_bigpuddle:
             self.lost_game = True
 
 
     def spread_fire(self):
+        """fire spreads of adjacent tiles"""
         self.fire_spread_time = random.random()
         if len(self.tiles_on_fire) > 0:
             tiles_to_add = []
@@ -711,6 +739,7 @@ class MyGame(arcade.Window):
 
             
     def spawn_water(self, x, y):
+        """spawn small water puddles"""
         water = arcade.Sprite()
         water.texture = self.small_pud_sprites[random.randrange(0, 4) * 10 + 2]
         water.scale = TILE_SCALING
@@ -722,6 +751,7 @@ class MyGame(arcade.Window):
             
             
     def game_over(self):
+        """ player failed to burn the whole level, stop all fire to let player retry"""
         self.lost_game = False
         self.fire_list.clear(deep=True)
         self.tiles_on_fire.clear()
@@ -730,6 +760,7 @@ class MyGame(arcade.Window):
     
     
     def change_cursor(self):
+        """ change cursor based on the item the player is holding and whether or not that item can be used"""
         self.world_x = self.mouse_x - SCREEN_WIDTH/2 + self.player.position[0]
         self.world_y = self.mouse_y - SCREEN_HEIGHT/2 + self.player.position[1]
 
