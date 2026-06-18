@@ -24,8 +24,6 @@ CAMERA_SPEED = 1
 TILE_SCALING = 4
 TIME_LIMIT = 30.0
 
-MAP_HEIGHT = 50
-
 BGM = arcade.load_sound("data/sounds/library.ogg")
 SLAP = arcade.load_sound("data/sounds/slap.ogg")
 BUCKET = arcade.load_sound("data/sounds/water_bucket.ogg")
@@ -262,6 +260,7 @@ class MyGame(arcade.View):
         self.librarian_list = None
         self.wall_list = None
         self.floor_list = None
+        self.puddle_list = None
         self.hotbar_sprite_list = None
         self.used_fire = False
         self.fire_list = None
@@ -308,17 +307,16 @@ class MyGame(arcade.View):
                 print("level1")
                 map_name = "data/maps/level6.tmj"
                 with open('data/maps/graph6.json') as json_file:
-                    data = json.load(json_file)
-                    print(data)
+                    self.node_pos = json.load(json_file)
+                    print(self.node_pos)
             case 2:
                 print("level2")
                 map_name = "data/maps/level6.tmj"
                 with open('data/maps/graph6.json') as json_file:
-                    data = json.load(json_file)
-                    print(data)
+                    self.node_pos = json.load(json_file)
 
-        start_node = data["nodes"][0]
-        end_node = data["nodes"][len(data["nodes"]) - 1]
+        start_node = self.node_pos["nodes"][0]
+        end_node = self.node_pos["nodes"][len(self.node_pos["nodes"]) - 1]
 
 
         self.lost_game = False
@@ -336,7 +334,7 @@ class MyGame(arcade.View):
         
         # Load textures for animation
         self.player_textures = arcade.load_spritesheet("data\sprites\player.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        player_pos = self.tile_to_pixel(start_node["x"], start_node["y"], 32 * TILE_SCALING, 32 * TILE_SCALING, data["dimensions"][1])
+        player_pos = self.tile_to_pixel(start_node["x"] + 6, start_node["y"] + 6, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
         print(player_pos)
         self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, player_pos[0], player_pos[1])
         
@@ -345,9 +343,12 @@ class MyGame(arcade.View):
         
         # set up guests
         self.guest_textures = arcade.load_spritesheet("data\sprites\guest.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        self.guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, 896, 4964, self.player, self.wall_list)
-        self.guest_list.append(self.guest)
         
+        for i in range(len(self.node_pos["nodes"])):
+        
+            guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["x"] + 6, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["y"] + 6, self.player, self.wall_list)
+            self.guest_list.append(guest)
+            
         # set up librarians
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1200, 4964, self.player, self.wall_list)
@@ -365,6 +366,7 @@ class MyGame(arcade.View):
         self.cor_wall_list = self.tile_map.sprite_lists["Corridor Walls"]
         self.cor_floor_list = self.tile_map.sprite_lists["Corridor Floors"]
         self.puddle_list = self.tile_map.sprite_lists["Puddles"]
+        print(self.puddle_list)
         
         self.cursor_sprite = arcade.Sprite()
         
@@ -381,19 +383,19 @@ class MyGame(arcade.View):
 
         for wall in self.wall_list:
             self.wall_coords.append(wall.position)
-            self.wall_tiles.append(self.pixel_to_tile(wall.position[0], wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+            self.wall_tiles.append(self.pixel_to_tile(wall.position[0], wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
         for cor_wall in self.cor_wall_list:
             self.wall_coords.append(cor_wall.position)
-            self.wall_tiles.append(self.pixel_to_tile(cor_wall.position[0], cor_wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+            self.wall_tiles.append(self.pixel_to_tile(cor_wall.position[0], cor_wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
         for floor in self.floor_list:
             self.floor_coords.append(floor.position)
-            self.floor_tiles.append(self.pixel_to_tile(floor.position[0], floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+            self.floor_tiles.append(self.pixel_to_tile(floor.position[0], floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
         for cor_floor in self.floor_list:
             self.floor_coords.append(cor_floor.position)
-            self.floor_tiles.append(self.pixel_to_tile(cor_floor.position[0], cor_floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+            self.floor_tiles.append(self.pixel_to_tile(cor_floor.position[0], cor_floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
         self.burnable_coords = self.wall_coords + self.floor_coords
         self.burnable_tiles = self.wall_tiles + self.floor_tiles
@@ -401,7 +403,7 @@ class MyGame(arcade.View):
         self.puddle_coords = {}
         
         for puddle in self.puddle_list:
-            self.puddle_coords[puddle] = [puddle.position, self.pixel_to_tile(puddle.position[0], puddle.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT)]
+            self.puddle_coords[puddle] = [puddle.position, self.pixel_to_tile(puddle.position[0], puddle.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1])]
 
         self.tiles_on_fire = []
         
@@ -713,7 +715,7 @@ class MyGame(arcade.View):
         
                 elif self.current_item == 2 and self.water_level >= 1 and self.clicked_tile not in self.slowed_fire_tiles.values() and self.clicked_tile in self.floor_tiles:
                     self.bucket_sound = arcade.play_sound(BUCKET, looping = False)
-                    self.spawn_water(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
+                    self.spawn_water(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (self.node_pos["dimensions"][1] - 0.5 - self.clicked_tile[1]))
                     self.water_level -= 1
                     
                 elif self.current_item == 3 and self.used_fire == False and self.clicked_tile in self.burnable_tiles:
@@ -723,7 +725,7 @@ class MyGame(arcade.View):
                     self.burning_sound = arcade.play_sound(FIRE)
                     if self.clicked_tile in self.burnable_tiles:
                         print(f"FIRE: {self.clicked_tile}", flush = True)
-                        self.spawn_fire(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
+                        self.spawn_fire(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (self.node_pos["dimensions"][1] - 0.5 - self.clicked_tile[1]))
                         self.tiles_on_fire.append(self.clicked_tile)
                 
                 elif self.current_item == 4 and self.clicked_tile in self.wall_tiles:
@@ -753,11 +755,11 @@ class MyGame(arcade.View):
         Convert Arcade pixel coordinates to Tiled tile coordinates.
         """
         tile_x = int(pixel_x // tile_width)
-        tile_y = int(map_height - (pixel_y // tile_height) - 1)
+        tile_y = int( map_height - (pixel_y // tile_height) - 1)
         return tile_x, tile_y
 
 
-    def tile_to_pixel(self, tile_x, tile_y, tile_width, tile_height, map_height):
+    def tile_to_pixel(self, tile_x, tile_y, tile_width, tile_height,  map_height):
         """
         Convert Tiled tile coordinates to Arcade pixel coordinates
         """
@@ -799,7 +801,7 @@ class MyGame(arcade.View):
             for tile in tiles_to_add:
                 if tile not in self.tiles_on_fire and tile in self.burnable_tiles:
                     self.tiles_on_fire.append(tile)
-                    self.spawn_fire(32 * TILE_SCALING * (tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - tile[1]))
+                    self.spawn_fire(32 * TILE_SCALING * (tile[0] + 0.5) , 32 * TILE_SCALING * (self.node_pos["dimensions"][1] - 0.5 - tile[1]))
 
             
     def spawn_water(self, x, y):
@@ -832,7 +834,7 @@ class MyGame(arcade.View):
 
         if self.current_item > 0:
             # only update clicked_tile if not using hand
-            self.clicked_tile = self.pixel_to_tile(self.world_x, self.world_y, 32 * TILE_SCALING, 32 * TILE_SCALING, MAP_HEIGHT)
+            self.clicked_tile = self.pixel_to_tile(self.world_x, self.world_y, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
 
             if self.current_item == 1:
                 self.hovered_puddles = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
