@@ -29,21 +29,21 @@ def edge_spring(edges, positions, displacement, target_len, strength=0.05):
         displacement[v][1] -= fy
 
 
-def save_png(graph, pos, width, height, path, dpi=150):
-    scale = 8 / max(width, height)  # fit longest side to 8 inches
-    fig, ax = plt.subplots(figsize=(width * scale, height * scale))
+# def save_png(graph, pos, width, height, path, dpi=150):
+#     scale = 8 / max(width, height)  # fit longest side to 8 inches
+#     fig, ax = plt.subplots(figsize=(width * scale, height * scale))
 
-    nx.draw(graph, pos=pos, with_labels=True, ax=ax,
-            node_color="#534AB7", font_color="white", edge_color="#aaa")
+#     nx.draw(graph, pos=pos, with_labels=True, ax=ax,
+#             node_color="#534AB7", font_color="white", edge_color="#aaa")
 
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_aspect("equal")   # prevent any remaining distortion
-    ax.set_clip_on(False)
-    for artist in ax.get_children():
-        artist.set_clip_on(False)
-    fig.savefig(path, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+#     ax.set_xlim(0, width)
+#     ax.set_ylim(0, height)
+#     ax.set_aspect("equal")   # prevent any remaining distortion
+#     ax.set_clip_on(False)
+#     for artist in ax.get_children():
+#         artist.set_clip_on(False)
+#     fig.savefig(path, dpi=dpi, bbox_inches="tight")
+#     plt.close(fig)
 
 
 def repulsive_f(num_nodes, ideal_dist, positions, displacement):
@@ -246,11 +246,6 @@ def main():
     G = nx.Graph()
     G.add_edges_from(edges)
     save_png(G, positions, 500, 500, "graph_force.png", 150)
-    
-    # positions = change_angles(edges, positions, num_nodes, 500, 300, 100)
-    # M = nx.Graph()
-    # M.add_edges_from(edges)
-    # save_png(M, positions, 500, 300, "graph_angles.png", 150)
 
     edges = reconnect(positions, num_nodes)
     
