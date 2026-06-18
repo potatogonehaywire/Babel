@@ -15,15 +15,14 @@ Layers produced (bottom to top):
 
 import json
 import random
+import generation_test
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-ROOM_W      = 7    # default room width  (tiles)
-ROOM_H      = 5    # default room height (tiles)
+ROOM_W      = 13
+ROOM_H      = 12
 MAP_PADDING = 3    # empty tile border around the whole map
 TILE_SIZE   = 32   # pixels per tile (main tileset)
-
-RANDOM_SEED = None   # set to None for a different layout each run
 
 # ── Tile IDs — main tileset (1-based GID) ─────────────────────────────────────
 TILE_EMPTY          = 0
@@ -48,26 +47,12 @@ PUDDLE_DENSITY = 0.15
 
 
 # Output paths
-GRAPH_JSON_PATH = "graph.json"
-MAP_PATH        = "dungeon_map.tmj"
+GRAPH_JSON_PATH = "data/maps/graph6.json"
+MAP_PATH        = "data/maps/level6.tmj"
 
-# ── Your graph data ───────────────────────────────────────────────────────────
 
-nodes = [
-    {"id": "A", "x": 2,  "y": 2},
-    {"id": "B", "x": 14, "y": 2},
-    {"id": "C", "x": 2,  "y": 12},
-    {"id": "D", "x": 14, "y": 12},
-    {"id": "E", "x": 28, "y": 7, "w": 9, "h": 7},
-]
-
-edges = [
-    ["A", "B"],
-    ["A", "C"],
-    ["B", "D"],
-    ["C", "D"],
-    ["D", "E"],
-]
+nodes , edges = generation_test.generate_graphs()
+print(nodes, edges)
 
 # ── Normalise nodes ───────────────────────────────────────────────────────────
 
@@ -77,14 +62,6 @@ for node in nodes:
 
 node_by_id = {str(n["id"]): n for n in nodes}
 
-if RANDOM_SEED is not None:
-    random.seed(RANDOM_SEED)
-
-# ── Step 1: Export graph.json ─────────────────────────────────────────────────
-
-with open(GRAPH_JSON_PATH, "w") as f:
-    json.dump({"nodes": nodes, "edges": edges}, f, indent=2)
-print(f"[1/2] Exported graph  → '{GRAPH_JSON_PATH}'")
 
 # ── Step 2: Build the tile grid ───────────────────────────────────────────────
 
@@ -97,6 +74,17 @@ origin_x = -min_x + MAP_PADDING
 origin_y = -min_y + MAP_PADDING
 map_w    = (max_x - min_x) + MAP_PADDING * 2
 map_h    = (max_y - min_y) + MAP_PADDING * 2
+
+exported_nodes = [
+    {**n, "x": n["x"] + origin_x, "y": n["y"] + origin_y}
+    for n in nodes
+]
+
+with open(GRAPH_JSON_PATH, "w") as f:
+    json.dump({"nodes": exported_nodes, "edges": edges, "dimensions" : (map_w, map_h)}, f, indent=2)
+
+
+
 
 corridor_floors = [TILE_EMPTY] * (map_w * map_h)
 corridor_walls  = [TILE_EMPTY] * (map_w * map_h)
@@ -161,13 +149,8 @@ def add_corridor_walls(corridor_cells):
                 continue
             corridor_walls[idx(nx, ny)] = TILE_CORRIDOR_WALL
 
+
 def room_exit_point(node, toward_x, toward_y):
-    """
-    Returns the wall tile of the room that faces toward (toward_x, toward_y).
-    The corridor starts at this wall tile (which will be opened as a doorway).
-    Unlike before, we return the wall tile itself — not one tile beyond it —
-    so the doorway opening and corridor connection are seamless.
-    """
     rx = node["x"] + origin_x
     ry = node["y"] + origin_y
     rw = node["w"]
@@ -177,29 +160,29 @@ def room_exit_point(node, toward_x, toward_y):
     dx = toward_x - cx
     dy = toward_y - cy
     if abs(dx) >= abs(dy):
-        # Exit through left or right wall
+        # Horizontal exit — 2 tile tall doorway at centre row
+        row = cy - 1   # shifted up so both rows clear the room interior
         if dx >= 0:
-            return (rx + rw - 1, cy)   # right wall tile, centre row
+            return [(rx + rw - 1, row), (rx + rw - 1, row + 1)]   # right wall
         else:
-            return (rx, cy)            # left wall tile, centre row
+            return [(rx, row), (rx, row + 1)]                      # left wall
     else:
-        # Exit through top or bottom wall
+        # Vertical exit — 1 tile wide doorway
         if dy >= 0:
-            return (cx, ry + rh - 1)   # bottom wall tile, centre column
+            return [(cx, ry + rh - 1)]    # bottom wall
         else:
-            return (cx, ry)            # top wall tile, centre column
+            return [(cx, ry)]             # top wall
+        
 
 def draw_l_corridor(ax, ay, bx, by):
-    """
-    Draws an L-shaped corridor from (ax,ay) to (bx,by).
-    Paints corridor floor on non-room tiles only.
-    Returns the set of corridor floor cells painted.
-    """
     cells = set()
+    # Horizontal segment — 2 tiles tall (ay and ay+1)
     for col in range(min(ax, bx), max(ax, bx) + 1):
-        set_corridor_floor(col, ay)
-        if (col, ay) not in room_tiles:
-            cells.add((col, ay))
+        for row in [ay, ay + 1]:
+            set_corridor_floor(col, row)
+            if (col, row) not in room_tiles:
+                cells.add((col, row))
+    # Vertical segment — 1 tile wide (bx only)
     for row in range(min(ay, by), max(ay, by) + 1):
         set_corridor_floor(bx, row)
         if (bx, row) not in room_tiles:
@@ -224,23 +207,39 @@ for id_a, id_b in edges:
     cby = b["y"] + b["h"] // 2 + origin_y
 
     # Wall tiles to open — these are the starting points of the corridor
-    aw = room_exit_point(a, cbx, cby)
-    bw = room_exit_point(b, cax, cay)
-    doorway_wall_tiles.add(aw)
-    doorway_wall_tiles.add(bw)
+    # aw = room_exit_point(a, cbx, cby)
+    # bw = room_exit_point(b, cax, cay)
+    # doorway_wall_tiles.add(aw)
+    # doorway_wall_tiles.add(bw)
 
+    aw_tiles = room_exit_point(a, cbx, cby)
+    bw_tiles = room_exit_point(b, cax, cay)
+    doorway_wall_tiles.update(aw_tiles)
+    doorway_wall_tiles.update(bw_tiles)
+    
     # Corridor runs between the two exit wall tiles (inclusive)
     # The wall tiles themselves are in room_tiles so draw_l_corridor skips them;
     # we step one tile outside each wall to find the first corridor cell.
-    ax_dir = 1 if aw[0] == a["x"] + a["w"] - 1 + origin_x else (-1 if aw[0] == a["x"] + origin_x else 0)
-    ay_dir = 1 if aw[1] == a["y"] + a["h"] - 1 + origin_y else (-1 if aw[1] == a["y"] + origin_y else 0)
-    bx_dir = 1 if bw[0] == b["x"] + b["w"] - 1 + origin_x else (-1 if bw[0] == b["x"] + origin_x else 0)
-    by_dir = 1 if bw[1] == b["y"] + b["h"] - 1 + origin_y else (-1 if bw[1] == b["y"] + origin_y else 0)
+    # ax_dir = 1 if aw[0] == a["x"] + a["w"] - 1 + origin_x else (-1 if aw[0] == a["x"] + origin_x else 0)
+    # ay_dir = 1 if aw[1] == a["y"] + a["h"] - 1 + origin_y else (-1 if aw[1] == a["y"] + origin_y else 0)
+    # bx_dir = 1 if bw[0] == b["x"] + b["w"] - 1 + origin_x else (-1 if bw[0] == b["x"] + origin_x else 0)
+    # by_dir = 1 if bw[1] == b["y"] + b["h"] - 1 + origin_y else (-1 if bw[1] == b["y"] + origin_y else 0)
 
-    ax_start = aw[0] + ax_dir
-    ay_start = aw[1] + ay_dir
-    bx_end   = bw[0] + bx_dir
-    by_end   = bw[1] + by_dir
+    # Step one tile outside the wall to find the first corridor cell.
+    # Use the first tile in the list to determine direction.
+    def step_outside(wall_tiles, node):
+        wx, wy = wall_tiles[0]
+        rx = node["x"] + origin_x
+        ry = node["y"] + origin_y
+        rw = node["w"]
+        rh = node["h"]
+        if wx == rx + rw - 1: return (wx + 1, wy)   # right wall → step right
+        if wx == rx:           return (wx - 1, wy)   # left wall  → step left
+        if wy == ry + rh - 1: return (wx, wy + 1)   # bottom     → step down
+        return (wx, wy - 1)                          # top        → step up
+
+    ax_start, ay_start = step_outside(aw_tiles, a)
+    bx_end,   by_end   = step_outside(bw_tiles, b)
 
     cells = draw_l_corridor(ax_start, ay_start, bx_end, by_end)
     all_corridor_cells |= cells
@@ -297,8 +296,8 @@ tiled_map = {
     "nextlayerid": 6,
     "nextobjectid": 1,
     "tilesets": [
-        {"firstgid": 1, "source": "data/sprites/room_tileset.tsx"},
-        {"firstgid" : PUDDLE_TILESET_FIRSTGID, "source": "data/sprites/puddles_tileset.tsx"}
+        {"firstgid": 1, "source": "../sprites/room_tileset.tsx"},
+        {"firstgid" : PUDDLE_TILESET_FIRSTGID, "source": "../sprites/puddles_tileset.tsx"}
     ],
     "layers": [
         make_layer(1, "Corridor Floors", corridor_floors),

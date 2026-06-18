@@ -5,9 +5,12 @@
 
 import random
 import arcade
+import arcade.gui
 import pyglet
 import math
+import json
 from pyglet.math import Vec2
+from collections import Counter
 
 SPRITE_SCALING_PLAYER = 3
 SPRITE_SCALING_HOTBAR = 1.5
@@ -16,15 +19,22 @@ SCREEN_WIDTH = 1680
 SCREEN_HEIGHT = 1050
 
 MOVE_SPEED = 6
-
 CAMERA_SPEED = 1
 
 TILE_SCALING = 4
-
 TIME_LIMIT = 30.0
 
 MAP_HEIGHT = 50
 
+BGM = arcade.load_sound("data/sounds/library.ogg")
+SLAP = arcade.load_sound("data/sounds/slap.ogg")
+BUCKET = arcade.load_sound("data/sounds/water_bucket.ogg")
+MOP = arcade.load_sound("data/sounds/mop.ogg")
+MATCH = arcade.load_sound("data/sounds/match.ogg")
+SHOVEL = arcade.load_sound("data/sounds/shovel.ogg")
+FIRE = arcade.load_sound("data/sounds/fire.ogg")
+
+LEVEL = 1
 
 class Character(arcade.Sprite):
     """ Class for all Animated Characters, updates animation each frame """
@@ -92,8 +102,8 @@ class Guest(Character):
                 hitting_wall = arcade.check_for_collision_with_list(self, self.wall_list)
                 if hitting_wall:
                     for wall in hitting_wall:
-                        diff_x = wall.center_x - self.center_x
-                        diff_y = wall.center_y - self.center_y
+                        diff_x = (wall.center_x - self.center_x) or 1e-6
+                        diff_y = (wall.center_y - self.center_y) or 1e-6
                         wall_direction_x = diff_x / abs(diff_x)
                         wall_direction_y = diff_y / abs(diff_y)
                         self.walk_away_from_wall(wall_direction_x, wall_direction_y)
@@ -213,8 +223,8 @@ class Librarian(Guest):
                 if self.wait_time <= 0:
                     if hitting_wall:
                         for wall in hitting_wall:
-                            diff_x = wall.center_x - self.center_x
-                            diff_y = wall.center_y - self.center_y
+                            diff_x = (wall.center_x - self.center_x) or 1e-6
+                            diff_y = (wall.center_y - self.center_y) or 1e-6
                             direction_x = -diff_x / abs(diff_x)
                             direction_y = -diff_y / abs(diff_y)
                             self.walk_away_from_wall(direction_x, direction_y)
@@ -236,18 +246,15 @@ class Librarian(Guest):
         return False
 
 
-class MyGame(arcade.Window):
+class MyGame(arcade.View):
     """ Our custom Window Class"""
     
     def __init__(self):
         """Initializer"""
         # Call the parent class initializer
-        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, "Test game")
+        super().__init__()
         
-        # Set location of window on screen
-        self.set_location(0,0)
-        
-        self.set_mouse_visible(False)
+        self.window.set_mouse_visible(False)
         
         # Variables that will have sprite lists
         self.player_list = None
@@ -269,7 +276,7 @@ class MyGame(arcade.Window):
         
         # Set up the player info
         self.player = None
-        self.level = 1
+        LEVEL = 1
         self.setup()
         
         self.bucket = None
@@ -282,10 +289,38 @@ class MyGame(arcade.Window):
         self.mouse_x = 0
         self.mouse_y = 0
 
+        self.burning_sound = None
+        self.library_sound = None
+
+
+    def on_show(self):
+        self.setup()
+
 
     def setup(self):
         """Set up the game and initialize the variables. """
         
+        self.library_sound = arcade.play_sound(BGM)
+
+        # find map
+        match LEVEL:
+            case 1:
+                print("level1")
+                map_name = "data/maps/level6.tmj"
+                with open('data/maps/graph6.json') as json_file:
+                    data = json.load(json_file)
+                    print(data)
+            case 2:
+                print("level2")
+                map_name = "data/maps/level6.tmj"
+                with open('data/maps/graph6.json') as json_file:
+                    data = json.load(json_file)
+                    print(data)
+
+        start_node = data["nodes"][0]
+        end_node = data["nodes"][len(data["nodes"]) - 1]
+
+
         self.lost_game = False
         self.used_fire = False
         self.time_left = TIME_LIMIT
@@ -301,8 +336,9 @@ class MyGame(arcade.Window):
         
         # Load textures for animation
         self.player_textures = arcade.load_spritesheet("data\sprites\player.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        
-        self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, 896, 4864)
+        player_pos = self.tile_to_pixel(start_node["x"], start_node["y"], 32 * TILE_SCALING, 32 * TILE_SCALING, data["dimensions"][1])
+        print(player_pos)
+        self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, player_pos[0], player_pos[1])
         
         # Set up the player
         self.player_list.append(self.player)
@@ -319,18 +355,16 @@ class MyGame(arcade.Window):
         
         self.water_level = 0        
         
-        if self.level == 1:
-            map_name = "data/maps/test_map.tmj"
-        if self.level == 2:
-            map_name = "data/project_work/test_hexagon.tmj"
-        
+
         # Read in the tiled map
         self.tile_map = arcade.load_tilemap(map_name, scaling=TILE_SCALING)
         
         # Set wall SpriteList and any others that you have.
-        self.puddle_list = self.tile_map.sprite_lists["Puddle"]
-        self.wall_list = self.tile_map.sprite_lists["Wall"]
-        self.floor_list = self.tile_map.sprite_lists["Floor"]
+        self.wall_list = self.tile_map.sprite_lists["Room Walls"]
+        self.floor_list = self.tile_map.sprite_lists["Room Floors"]
+        self.cor_wall_list = self.tile_map.sprite_lists["Corridor Walls"]
+        self.cor_floor_list = self.tile_map.sprite_lists["Corridor Floors"]
+        self.puddle_list = self.tile_map.sprite_lists["Puddles"]
         
         self.cursor_sprite = arcade.Sprite()
         
@@ -349,9 +383,17 @@ class MyGame(arcade.Window):
             self.wall_coords.append(wall.position)
             self.wall_tiles.append(self.pixel_to_tile(wall.position[0], wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
         
+        for cor_wall in self.cor_wall_list:
+            self.wall_coords.append(cor_wall.position)
+            self.wall_tiles.append(self.pixel_to_tile(cor_wall.position[0], cor_wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+        
         for floor in self.floor_list:
             self.floor_coords.append(floor.position)
             self.floor_tiles.append(self.pixel_to_tile(floor.position[0], floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
+        
+        for cor_floor in self.floor_list:
+            self.floor_coords.append(cor_floor.position)
+            self.floor_tiles.append(self.pixel_to_tile(cor_floor.position[0], cor_floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , MAP_HEIGHT))
         
         self.burnable_coords = self.wall_coords + self.floor_coords
         self.burnable_tiles = self.wall_tiles + self.floor_tiles
@@ -426,6 +468,8 @@ class MyGame(arcade.Window):
 
         self.wall_list.draw(pixelated = True)
         self.floor_list.draw(pixelated = True)
+        self.cor_floor_list.draw(pixelated = True)
+        self.cor_wall_list.draw(pixelated = True)
         self.puddle_list.draw(pixelated = True)
         self.small_pud_list.draw(pixelated = True)
         self.guest_list.draw(pixelated = True)
@@ -537,8 +581,8 @@ class MyGame(arcade.Window):
         """Scroll the window to the player. If CAMERA_SPEED is 1, the camera will immediately move to the desire
         Anything between 0 and 1 will have the camera move to the location with pan."""
         
-        position = Vec2(self.player.center_x - self.width / 2,
-                        self.player.center_y - self.height / 2)
+        position = Vec2(self.player.center_x - SCREEN_WIDTH / 2,
+                        self.player.center_y - SCREEN_HEIGHT / 2)
         self.camera_sprites.move_to(position, CAMERA_SPEED)  
     
     
@@ -571,7 +615,12 @@ class MyGame(arcade.Window):
                 self.current_item = 4
             
             case arcade.key.ESCAPE:
-                arcade.close_window()
+                if self.burning_sound:
+                    arcade.stop_sound(self.burning_sound)
+                if self.library_sound:
+                    arcade.stop_sound(self.library_sound)
+                menu_view = MenuView(self)
+                self.window.show_view(menu_view)
                 
             case arcade.key.A:
                 self.player.change_x = -MOVE_SPEED
@@ -590,10 +639,10 @@ class MyGame(arcade.Window):
                 self.player.direction[1] = -1
             
             case arcade.key.L:
-                if self.level == 1 and self.guests_hit >= 2 and self.percent_level_burnt > 95:
-                    self.level = 2
+                if LEVEL == 1 and self.guests_hit >= 2 and self.percent_level_burnt > 95:
+                    LEVEL = 2
                 else:
-                    self.level = 1
+                    LEVEL = 1
                 self.setup()
     
     
@@ -629,6 +678,7 @@ class MyGame(arcade.Window):
                         for guest in self.hovered_guests:
                             # slap guest if the guest is in range
                             if guest.hurtbox_in_range():
+                                self.hit_sound = arcade.play_sound(SLAP, looping = False)
                                 guest.is_hit()
                                 self.guests_hit += 1
                 # if using mop
@@ -638,6 +688,8 @@ class MyGame(arcade.Window):
                     
                     # if cursor is hovering over a large puddle
                     if hovered_big_puddles:
+
+                        self.mop_sound = arcade.play_sound(MOP, looping = False)
                         
                         # fill up water bucket
                         if self.water_level <= 3:
@@ -660,18 +712,22 @@ class MyGame(arcade.Window):
         
         
                 elif self.current_item == 2 and self.water_level >= 1 and self.clicked_tile not in self.slowed_fire_tiles.values() and self.clicked_tile in self.floor_tiles:
+                    self.bucket_sound = arcade.play_sound(BUCKET, looping = False)
                     self.spawn_water(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
                     self.water_level -= 1
                     
                 elif self.current_item == 3 and self.used_fire == False and self.clicked_tile in self.burnable_tiles:
                     self.used_fire = True
-
+                    arcade.stop_sound(self.library_sound)
+                    self.match_sound = arcade.play_sound(MATCH, looping = False)
+                    self.burning_sound = arcade.play_sound(FIRE)
                     if self.clicked_tile in self.burnable_tiles:
                         print(f"FIRE: {self.clicked_tile}", flush = True)
                         self.spawn_fire(32 * TILE_SCALING * (self.clicked_tile[0] + 0.5) , 32 * TILE_SCALING * (MAP_HEIGHT - 0.5 - self.clicked_tile[1]))
                         self.tiles_on_fire.append(self.clicked_tile)
                 
                 elif self.current_item == 4 and self.clicked_tile in self.wall_tiles:
+                    self.shovel_sound = arcade.play_sound(SHOVEL, looping = False)
                     hovered_sprites = arcade.get_sprites_at_point((self.world_x,self.world_y), self.wall_list)
                     for sprite in hovered_sprites:
                         sprite.remove_from_sprite_lists()
@@ -700,6 +756,14 @@ class MyGame(arcade.Window):
         tile_y = int(map_height - (pixel_y // tile_height) - 1)
         return tile_x, tile_y
 
+
+    def tile_to_pixel(self, tile_x, tile_y, tile_width, tile_height, map_height):
+        """
+        Convert Tiled tile coordinates to Arcade pixel coordinates
+        """
+        pixel_x = tile_x * tile_width + tile_width / 2
+        pixel_y = (map_height - tile_y - 1) * tile_height + tile_height / 2
+        return pixel_x, pixel_y
 
     def spawn_fire(self, x, y):
         """ spawns fire using inputted location"""
@@ -757,6 +821,8 @@ class MyGame(arcade.Window):
         self.tiles_on_fire.clear()
         self.time_left = TIME_LIMIT
         self.used_fire = False
+        arcade.stop_sound(self.burning_sound)
+        self.library_sound = arcade.play_sound(BGM)
     
     
     def change_cursor(self):
@@ -806,10 +872,115 @@ class MyGame(arcade.Window):
             self.cursor_sprite.scale = 1    
 
 
+class MenuView(arcade.View):
+    """Main menu view class."""
+
+    def __init__(self, main_view):
+        super().__init__()
+
+        self.window.set_mouse_visible(True)
+
+        # Changing background color of screen
+        arcade.set_background_color((82, 55, 16))
+
+        # Creating a UI MANAGER to handle the UI
+        self.uimanager = arcade.gui.UIManager()
+
+        self.game_view = main_view
+
+    def on_hide_view(self):
+        self.uimanager.disable()
+
+
+    def on_show(self):
+        self.uimanager.enable()
+        self.create_menu()
+
+
+    def create_menu(self):
+        # Creating Button using UIFlatButton
+        lvl1_button = arcade.gui.UIFlatButton(text="Level 1",
+                                               width=200)
+        lvl2_button = arcade.gui.UIFlatButton(text="Level 2",
+                                                    width=200)
+        lvl3_button = arcade.gui.UIFlatButton(text="Level 3",
+                                                    width=200)
+        lvl4_button = arcade.gui.UIFlatButton(text="Level 4",
+                                               width=200)
+        lvl5_button = arcade.gui.UIFlatButton(text="Level 5",
+                                               width=200)
+        lvl6_button = arcade.gui.UIFlatButton(text="Level 6",
+                                               width=200)
+        exit_button = arcade.gui.UIFlatButton(text="Quit",
+                                               width=200)
+        
+        # Assigning our on_buttonclick() function
+        #lvl1_button.on_click = self.on_buttonclick
+
+        v_box = arcade.gui.UIBoxLayout(space_between=10)
+        v_box.add(lvl1_button)
+        v_box.add(lvl2_button)
+        v_box.add(lvl3_button)
+        v_box.add(lvl4_button)
+        v_box.add(lvl5_button)
+        v_box.add(lvl6_button)
+        v_box.add(exit_button)
+
+        anchor = arcade.gui.UIAnchorWidget(child=v_box, anchor_x="center", anchor_y="center")
+
+        self.uimanager.add(anchor)
+
+
+        @lvl1_button.event("on_click")
+        def on_click_1(event):
+            global LEVEL
+            LEVEL = 1
+
+            self.window.show_view(self.game_view)
+
+        @lvl2_button.event("on_click")
+        def on_click_2(event):
+            global LEVEL
+            LEVEL = 2
+            self.window.show_view(self.game_view)
+
+        @lvl3_button.event("on_click")
+        def on_click_3(event):
+            self.window.show_view(self.game_view)
+
+        @lvl4_button.event("on_click")
+        def on_click_4(event):
+            self.window.show_view(self.game_view)
+
+        @lvl5_button.event("on_click")
+        def on_click_5(event):
+            self.window.show_view(self.game_view)
+
+        @lvl6_button.event("on_click")
+        def on_click_6(event):
+            self.window.show_view(self.game_view)
+        
+        @exit_button.event("on_click")
+        def on_click_exit(event):
+            arcade.close_window()
+
+    def on_draw(self):
+        arcade.start_render()
+        
+        # Drawing our ui manager
+        self.uimanager.draw()
+
+        arcade.draw_text("Library of Babel", SCREEN_WIDTH/3, SCREEN_HEIGHT*3/4, arcade.color.WHITE, 100, font_name = "times", bold = True, italic = True)
+
+
 def main():
     """Main method """
-    window = MyGame()
-    window.setup()
+    window = arcade.Window(SCREEN_WIDTH, SCREEN_HEIGHT, "Library of Babel")
+    # Set location of window on screen
+    window.set_location(0,0)
+    game_view = MyGame()
+    menu_view = MenuView(game_view)
+    window.show_view(menu_view)
     arcade.run()
     
     

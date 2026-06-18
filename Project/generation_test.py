@@ -29,21 +29,21 @@ def edge_spring(edges, positions, displacement, target_len, strength=0.05):
         displacement[v][1] -= fy
 
 
-# def save_png(graph, pos, width, height, path, dpi=150):
-#     scale = 8 / max(width, height)  # fit longest side to 8 inches
-#     fig, ax = plt.subplots(figsize=(width * scale, height * scale))
+def save_png(graph, pos, width, height, path, dpi=150):
+    scale = 8 / max(width, height)  # fit longest side to 8 inches
+    fig, ax = plt.subplots(figsize=(width * scale, height * scale))
 
-#     nx.draw(graph, pos=pos, with_labels=True, ax=ax,
-#             node_color="#534AB7", font_color="white", edge_color="#aaa")
+    nx.draw(graph, pos=pos, with_labels=True, ax=ax,
+            node_color="#534AB7", font_color="white", edge_color="#aaa")
 
-#     ax.set_xlim(0, width)
-#     ax.set_ylim(0, height)
-#     ax.set_aspect("equal")   # prevent any remaining distortion
-#     ax.set_clip_on(False)
-#     for artist in ax.get_children():
-#         artist.set_clip_on(False)
-#     fig.savefig(path, dpi=dpi, bbox_inches="tight")
-#     plt.close(fig)
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
+    ax.set_aspect("equal")   # prevent any remaining distortion
+    ax.set_clip_on(False)
+    for artist in ax.get_children():
+        artist.set_clip_on(False)
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
 
 
 def repulsive_f(num_nodes, ideal_dist, positions, displacement):
@@ -52,8 +52,7 @@ def repulsive_f(num_nodes, ideal_dist, positions, displacement):
             if first_node != other_node:
                 dist_x = positions[first_node][0] - positions[other_node][0]
                 dist_y = positions[first_node][1] - positions[other_node][1]
-                dist = math.sqrt(dist_x ** 2 + dist_y ** 2)
-
+                dist = math.sqrt(dist_x ** 2 + dist_y ** 2) or 1e-6
                 displacement[first_node][0] += (dist_x/dist) * (ideal_dist**2 /dist)
                 displacement[first_node][1] += (dist_y/dist) * (ideal_dist**2 /dist)
     
@@ -95,10 +94,10 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
         
     E = nx.Graph()
     E.add_edges_from(edges)
-    save_png(E, positions, 500, 300, "graph_original.png", 150)    
+    # save_png(E, positions, 500, 300, "graph_original.png", 150)    
     
     area = width * height
-    ideal_dist = math.sqrt(area/(num_nodes*10))
+    ideal_dist = math.sqrt(area/(num_nodes*7))
 
     temperature = width / 10.0
     cooling = temperature / (iterations + 1)
@@ -220,9 +219,11 @@ def reconnect(positions, num_nodes):
     # Check if spanning tree was achievable — warn if not
     roots = set(find(i) for i in range(num_nodes))
     if len(roots) > 1:
+        map_connected = False
         print(f"Warning: could not fully connect graph ({len(roots)} components). "
               f"Degree-2 + no-crossing constraints may be too strict for this layout.")
-
+    else:
+        map_connected = True
     # --- Pass 2: Add remaining non-crossing edges up to degree cap ---
     for dist, i, j in candidates:
         if degree[i] >= 2 or degree[j] >= 2:
@@ -234,27 +235,36 @@ def reconnect(positions, num_nodes):
                 degree[i] += 1
                 degree[j] += 1
 
-    return accepted
+    return accepted, map_connected
 
 
-def main():
-    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5), (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)]
+def generate_graphs():
+    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5), (7,8), (8,9), (4,6), (4,2), (3,6), (2,5), (1,5), (8, 3), (8, 5)]
     #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
-    num_nodes = 17
+    num_nodes = 10
+    map_is_connected = False
+
 
     positions = fruchterman_reingold(edges, num_nodes, 500, 500, 100)
-    G = nx.Graph()
-    G.add_edges_from(edges)
-    save_png(G, positions, 500, 500, "graph_force.png", 150)
+    # G = nx.Graph()
+    # G.add_edges_from(edges)
+    #save_png(G, positions, 500, 500, "graph_force.png", 150)
 
-    edges = reconnect(positions, num_nodes)
-    
+    edges , map_is_connected = reconnect(positions, num_nodes)
+    print(map_is_connected)
     H = nx.Graph()
     H.add_edges_from(edges)
+
     save_png(H, positions, 500, 500, "graph_reorder.png", 150)
-
-    positions
+    export_nodes = []
+    for node, coords in positions.items():
+        export_positions = {}
+        export_positions["id"] = node
+        export_positions["x"] = coords[0]//2
+        export_positions["y"] = coords[1]//2
+        export_nodes.append(export_positions)
     
+    return export_nodes, edges
 
     
-main()
+# main()
