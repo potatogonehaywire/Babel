@@ -345,7 +345,8 @@ class MyGame(arcade.View):
         self.guest_textures = arcade.load_spritesheet("data\sprites\guest.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         
         for i in range(len(self.node_pos["room_center"])):
-            guest_pos = self.tile_to_pixel(self.node_pos["room_center"][random.randint(1, len(self.node_pos["room_center"]) - 1)]["centre_x"], self.node_pos["room_center"][random.randint(1, len(self.node_pos["room_center"]) - 1)]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+            node = random.randint(0, len(self.node_pos["room_center"]) - 1)
+            guest_pos = self.tile_to_pixel(self.node_pos["room_center"][node]["centre_x"], self.node_pos["room_center"][node]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
             guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, guest_pos[0],guest_pos[1] , self.player, self.wall_list)
             self.guest_list.append(guest)
             
@@ -353,7 +354,8 @@ class MyGame(arcade.View):
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
 
         for i in range(len(self.node_pos["room_center"])//2):
-            librarian_pos = self.tile_to_pixel(self.node_pos["room_center"][random.randint(1, len(self.node_pos["room_center"]) - 1)]["centre_x"], self.node_pos["room_center"][random.randint(1, len(self.node_pos["room_center"]) - 1)]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+            node = random.randint(1, len(self.node_pos["room_center"]) - 1)
+            librarian_pos = self.tile_to_pixel(self.node_pos["room_center"][node]["centre_x"], self.node_pos["room_center"][node]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
             librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, librarian_pos[0],librarian_pos[1] , self.player, self.wall_list)
             self.librarian_list.append(librarian)
         
@@ -362,9 +364,10 @@ class MyGame(arcade.View):
         for i in range(len(self.node_pos["room_center"]) * 2):
             invalid_puddle = True
             while invalid_puddle:
-                puddle_room_pos = self.tile_to_pixel(self.node_pos["room_center"][random.randint(0, len(self.node_pos["room_center"]) - 1)]["centre_x"], self.node_pos["room_center"][random.randint(0, len(self.node_pos["room_center"]) - 1)]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
-                puddle_pos_x = puddle_room_pos[0] #+ random.randint(-2 * 32 * TILE_SCALING, 2 * 32 * TILE_SCALING)
-                puddle_pos_y = puddle_room_pos[1] #+ random.randint(-2 * 32 * TILE_SCALING, 2 * 32 * TILE_SCALING)
+                node = random.randint(0, len(self.node_pos["room_center"]) - 1)
+                puddle_room_pos = self.tile_to_pixel(self.node_pos["room_center"][node]["centre_x"], self.node_pos["room_center"][node]["centre_y"], 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+                puddle_pos_x = puddle_room_pos[0] + random.randint(-3 * 32 * TILE_SCALING, 3 * 32 * TILE_SCALING)
+                puddle_pos_y = puddle_room_pos[1] + random.randint(-3 * 32 * TILE_SCALING, 3 * 32 * TILE_SCALING)
                 puddle = arcade.Sprite(texture=self.puddle_textures[random.randint(0,4)], scale = TILE_SCALING, center_x = puddle_pos_x, center_y = puddle_pos_y)
                 overlapping_puddle = arcade.check_for_collision_with_list(puddle, self.puddle_list)
                 if not overlapping_puddle:
@@ -651,13 +654,6 @@ class MyGame(arcade.View):
             case arcade.key.S:
                 self.player.change_y = -MOVE_SPEED
                 self.player.direction[1] = -1
-            
-            case arcade.key.L:
-                if LEVEL == 1 and self.guests_hit >= 2 and self.percent_level_burnt > 95:
-                    LEVEL = 2
-                else:
-                    LEVEL = 1
-                self.setup()
     
     
     def on_key_release(self, key, modifiers):
