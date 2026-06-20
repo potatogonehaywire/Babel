@@ -14,19 +14,19 @@
             "scaleInDock": 1
         },
         "D:/Stuff/code/Babel/Project/data/maps/level6.tmj": {
-            "scale": 0.33,
-            "selectedLayer": 1,
+            "scale": 1.5,
+            "selectedLayer": 4,
             "viewCenter": {
-                "x": 2306.060606060606,
-                "y": 1136.3636363636365
+                "x": 1095.3333333333333,
+                "y": 5337.333333333333
             }
         },
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj": {
-            "scale": 0.75,
-            "selectedLayer": 0,
+            "scale": 0.33,
+            "selectedLayer": 2,
             "viewCenter": {
-                "x": 842.6666666666667,
-                "y": 800
+                "x": 839.3939393939393,
+                "y": 1042.4242424242425
             }
         },
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx": {

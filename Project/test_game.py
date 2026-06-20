@@ -335,7 +335,6 @@ class MyGame(arcade.View):
         # Load textures for animation
         self.player_textures = arcade.load_spritesheet("data\sprites\player.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         player_pos = self.tile_to_pixel(start_node["x"] + 6, start_node["y"] + 6, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
-        print(player_pos)
         self.player = Character(self.player_textures, SPRITE_SCALING_PLAYER, 0.2, player_pos[0], player_pos[1])
         
         # Set up the player
@@ -345,14 +344,17 @@ class MyGame(arcade.View):
         self.guest_textures = arcade.load_spritesheet("data\sprites\guest.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
         
         for i in range(len(self.node_pos["nodes"])):
-        
-            guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["x"] + 6, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["y"] + 6, self.player, self.wall_list)
+            guest_pos = self.tile_to_pixel(self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["x"] + 6, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["y"] + 6, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+            guest = Guest(self.guest_textures, SPRITE_SCALING_PLAYER, 0.2, guest_pos[0],guest_pos[1] , self.player, self.wall_list)
             self.guest_list.append(guest)
             
         # set up librarians
         self.librarian_textures = arcade.load_spritesheet("data\sprites\librarian.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
-        self.librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, 1200, 4964, self.player, self.wall_list)
-        self.librarian_list.append(self.librarian)
+
+        for i in range(len(self.node_pos["nodes"])//2):
+            librarian_pos = self.tile_to_pixel(self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["x"] + 6, self.node_pos["nodes"][random.randint(1, len(self.node_pos["nodes"]) - 1)]["y"] + 6, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+            librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, librarian_pos[0],librarian_pos[1] , self.player, self.wall_list)
+            self.librarian_list.append(librarian)
         
         self.water_level = 0        
         
@@ -366,7 +368,6 @@ class MyGame(arcade.View):
         self.cor_wall_list = self.tile_map.sprite_lists["Corridor Walls"]
         self.cor_floor_list = self.tile_map.sprite_lists["Corridor Floors"]
         self.puddle_list = self.tile_map.sprite_lists["Puddles"]
-        print(self.puddle_list)
         
         self.cursor_sprite = arcade.Sprite()
         
