@@ -17,16 +17,16 @@
             "scale": 1.5,
             "selectedLayer": 4,
             "viewCenter": {
-                "x": 1095.3333333333333,
-                "y": 5337.333333333333
+                "x": 1077.3333333333333,
+                "y": 5242
             }
         },
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj": {
-            "scale": 0.33,
+            "scale": 1.5,
             "selectedLayer": 2,
             "viewCenter": {
-                "x": 839.3939393939393,
-                "y": 1042.4242424242425
+                "x": 549.3333333333333,
+                "y": 1042.6666666666665
             }
         },
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx": {

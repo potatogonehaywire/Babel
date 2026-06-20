@@ -331,6 +331,7 @@ class MyGame(arcade.View):
         self.player_list = arcade.SpriteList()
         self.guest_list = arcade.SpriteList()
         self.librarian_list = arcade.SpriteList()
+        self.puddle_list = arcade.SpriteList()
         
         # Load textures for animation
         self.player_textures = arcade.load_spritesheet("data\sprites\player.png", sprite_width = 32, sprite_height = 64, columns = 4, count = 16)
@@ -356,6 +357,22 @@ class MyGame(arcade.View):
             librarian = Librarian(self.librarian_textures, SPRITE_SCALING_PLAYER, 0.2, librarian_pos[0],librarian_pos[1] , self.player, self.wall_list)
             self.librarian_list.append(librarian)
         
+        self.puddle_textures = arcade.load_spritesheet("data\sprites\puddles.png", sprite_width = 64, sprite_height = 64, columns = 1, count = 5)
+        
+        for i in range(len(self.node_pos["nodes"]) * 2):
+            invalid_puddle = True
+            while invalid_puddle:
+                puddle_room_pos = self.tile_to_pixel(self.node_pos["nodes"][random.randint(0, len(self.node_pos["nodes"]) - 1)]["x"] + 6, self.node_pos["nodes"][random.randint(0, len(self.node_pos["nodes"]) - 1)]["y"] + 6, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
+                puddle_pos_x = puddle_room_pos[0] + random.randint(-2 * 32 * TILE_SCALING, 2 * 32 * TILE_SCALING)
+                puddle_pos_y = puddle_room_pos[1] + random.randint(-2 * 32 * TILE_SCALING, 2 * 32 * TILE_SCALING)
+                puddle = arcade.Sprite(texture=self.puddle_textures[random.randint(0,4)], scale = TILE_SCALING, center_x = puddle_pos_x, center_y = puddle_pos_y)
+                overlapping_puddle = arcade.check_for_collision_with_list(puddle, self.puddle_list)
+                if not overlapping_puddle:
+                    invalid_puddle = False
+
+
+            self.puddle_list.append(puddle)
+
         self.water_level = 0        
         
 
@@ -367,7 +384,6 @@ class MyGame(arcade.View):
         self.floor_list = self.tile_map.sprite_lists["Room Floors"]
         self.cor_wall_list = self.tile_map.sprite_lists["Corridor Walls"]
         self.cor_floor_list = self.tile_map.sprite_lists["Corridor Floors"]
-        self.puddle_list = self.tile_map.sprite_lists["Puddles"]
         
         self.cursor_sprite = arcade.Sprite()
         
@@ -400,11 +416,6 @@ class MyGame(arcade.View):
         
         self.burnable_coords = self.wall_coords + self.floor_coords
         self.burnable_tiles = self.wall_tiles + self.floor_tiles
-
-        self.puddle_coords = {}
-        
-        for puddle in self.puddle_list:
-            self.puddle_coords[puddle] = [puddle.position, self.pixel_to_tile(puddle.position[0], puddle.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1])]
 
         self.tiles_on_fire = []
         
@@ -701,8 +712,6 @@ class MyGame(arcade.View):
                         # remove water puddle
                         for sprite in hovered_big_puddles:
                             sprite.remove_from_sprite_lists()
-                            del self.puddle_coords[sprite]
-                            
                     else:
                         hovered_small_pud = arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
                         # if hovering over a small puddle
