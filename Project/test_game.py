@@ -1000,6 +1000,8 @@ class MenuView(arcade.View):
         def on_click_1(event):
             global LEVEL
             LEVEL = 1
+            global TIME_LIMIT
+            TIME_LIMIT = 60.0
             graph_to_tilemap.make_map(1)
             self.window.show_view(self.game_view)
 
@@ -1007,6 +1009,8 @@ class MenuView(arcade.View):
         def on_click_2(event):
             global LEVEL
             LEVEL = 2
+            global TIME_LIMIT
+            TIME_LIMIT = 80.0
             graph_to_tilemap.make_map(2)
             self.window.show_view(self.game_view)
 
@@ -1014,6 +1018,8 @@ class MenuView(arcade.View):
         def on_click_3(event):
             global LEVEL
             LEVEL = 3
+            global TIME_LIMIT
+            TIME_LIMIT = 100.0
             graph_to_tilemap.make_map(3)
             self.window.show_view(self.game_view)
 
@@ -1021,6 +1027,8 @@ class MenuView(arcade.View):
         def on_click_4(event):
             global LEVEL
             LEVEL = 4
+            global TIME_LIMIT
+            TIME_LIMIT = 1200.0
             graph_to_tilemap.make_map(4)
             self.window.show_view(self.game_view)
 
@@ -1028,6 +1036,8 @@ class MenuView(arcade.View):
         def on_click_5(event):
             global LEVEL
             LEVEL = 5
+            global TIME_LIMIT
+            TIME_LIMIT = 140.0
             graph_to_tilemap.make_map(5)
             self.window.show_view(self.game_view)
 
@@ -1035,6 +1045,8 @@ class MenuView(arcade.View):
         def on_click_6(event):
             global LEVEL
             LEVEL = 6
+            global TIME_LIMIT
+            TIME_LIMIT = 180.0
             graph_to_tilemap.make_map(6)
             self.window.show_view(self.game_view)
         
@@ -1101,6 +1113,11 @@ class WinView(arcade.View):
         def on_click_next_lvl(event):
             global LEVEL
             LEVEL += 1
+            global TIME_LIMIT
+            if LEVEL < 6:
+                TIME_LIMIT += 20.0
+            else: 
+                TIME_LIMIT += 40.O
             graph_to_tilemap.make_map(1)
             self.window.show_view(self.game_view)
         
