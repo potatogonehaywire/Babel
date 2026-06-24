@@ -235,8 +235,7 @@ def reconnect(positions, num_nodes):
                 degree[i] += 1
                 degree[j] += 1
 
-    return accepted, map_connected
-
+    return accepted
 
 def generate_graphs(level):
     # level 5

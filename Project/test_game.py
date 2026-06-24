@@ -19,11 +19,11 @@ SPRITE_SCALING_HOTBAR = 1.5
 SCREEN_WIDTH = 1680
 SCREEN_HEIGHT = 1050
 
-MOVE_SPEED = 6
+MOVE_SPEED = 8
 CAMERA_SPEED = 1
 
 TILE_SCALING = 4
-TIME_LIMIT = 30.0
+TIME_LIMIT = 60.0
 
 BGM = arcade.load_sound("data/sounds/library.ogg")
 SLAP = arcade.load_sound("data/sounds/slap.ogg")
@@ -89,6 +89,7 @@ class Guest(Character):
         self.change_direction()
         self.wall_list = wall_list
         self.walking_to_exit = False
+        self.launch_time = 0
     
         
     def update(self, delta_time: float = 1 / 60):
@@ -107,6 +108,14 @@ class Guest(Character):
                         wall_direction_y = diff_y / abs(diff_y)
                         self.walk_away_from_wall(wall_direction_x, wall_direction_y)
                 self.wander()
+        
+        else:
+            self.launch_time += delta_time
+            self.center_x += 3 ** (self.launch_time + 1)
+            self.center_y += 2 ** (self.launch_time + 1)
+            self.angle = self.launch_time * 100
+            if self.launch_time >= 2:
+                self.kill()
 
     
     def walk_away_from_wall(self, x_direction, y_direction):
@@ -203,7 +212,7 @@ class Librarian(Guest):
     
     def __init__(self, sprite_frames, scale, frame_duration, x, y, player, wall_list):
         super().__init__(sprite_frames, scale, frame_duration, x, y, player, wall_list)
-        self.speed = 3
+        self.speed = 4
         self.detection_radius = 500
         self.hit_timer = 0.2
         self.hit_player = False
@@ -228,6 +237,13 @@ class Librarian(Guest):
                             direction_y = -diff_y / abs(diff_y)
                             self.walk_away_from_wall(direction_x, direction_y)
                     self.wander()
+        else:
+            self.launch_time += delta_time
+            self.center_x += 3 ** (self.launch_time + 1)
+            self.center_y += 2 ** (self.launch_time + 1)
+            self.angle = self.launch_time * 100
+            if self.launch_time >= 2:
+                self.kill()
                 
                 
     def player_hit(self, delta_time : float = 1/60):
@@ -424,19 +440,21 @@ class MyGame(arcade.View):
             self.wall_tiles.append(self.pixel_to_tile(wall.position[0], wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
         for cor_wall in self.cor_wall_list:
+            self.wall_list.append(cor_wall)
             self.wall_coords.append(cor_wall.position)
             self.wall_tiles.append(self.pixel_to_tile(cor_wall.position[0], cor_wall.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
-        
+
         for floor in self.floor_list:
             self.floor_coords.append(floor.position)
             self.floor_tiles.append(self.pixel_to_tile(floor.position[0], floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
-        for cor_floor in self.floor_list:
+        for cor_floor in self.cor_floor_list:
+            self.floor_list.append(cor_floor)
             self.floor_coords.append(cor_floor.position)
             self.floor_tiles.append(self.pixel_to_tile(cor_floor.position[0], cor_floor.position[1], 32 * TILE_SCALING , 32 * TILE_SCALING , self.node_pos["dimensions"][1]))
         
-        self.burnable_coords = self.wall_coords + self.floor_coords
-        self.burnable_tiles = self.wall_tiles + self.floor_tiles
+        self.burnable_coords = self.floor_coords
+        self.burnable_tiles = self.floor_tiles
 
         self.tiles_on_fire = []
         
@@ -529,6 +547,7 @@ class MyGame(arcade.View):
         # display text
         arcade.draw_text(f"Percentage of level burnt: {self.percent_level_burnt:.2f}%", 30, 990, arcade.color.WHITE, 25)
         arcade.draw_text(f"Puddles Wiped: {int((self.initial_puddles - len(self.puddle_list)))} / {int(self.initial_puddles)}", 30, 930, arcade.color.WHITE, 25)
+        arcade.draw_text(f"People Saved: {self.guests_hit} / {len(self.guest_list) + len(self.librarian_list)}", 30, 890, arcade.color.WHITE, 25)
         arcade.draw_text(f"Time Left: {self.time_left:.2f} s", 1380, 980, arcade.color.WHITE, 25)
         
         # draw restart button
@@ -602,11 +621,19 @@ class MyGame(arcade.View):
         
         # upate cursor 
         self.change_cursor()
+
+        if self.percent_level_burnt > 90:
+            if self.burning_sound:
+                arcade.stop_sound(self.burning_sound)
+            if self.library_sound:
+                arcade.stop_sound(self.library_sound)
+            menu_view = MenuView(self)
+            self.window.show_view(menu_view)
         
         # player loses game if the fire takes too long to spread, doesn't restart game fully
         if self.time_left <= 0:
             self.lost_game = True
-        
+
         if self.lost_game:
             self.game_over()
         
@@ -705,7 +732,7 @@ class MyGame(arcade.View):
                     if self.hovered_guests:
                         for guest in self.hovered_guests:
                             # slap guest if the guest is in range
-                            if guest.hurtbox_in_range():
+                            if guest.hurtbox_in_range() and not guest.walking_to_exit:
                                 self.hit_sound = arcade.play_sound(SLAP, looping = False)
                                 guest.is_hit()
                                 self.guests_hit += 1
@@ -801,13 +828,15 @@ class MyGame(arcade.View):
         self.fire_list.append(fire)
         # lose game if spawned fire in a large puddle
         colliding_bigpuddle = arcade.check_for_collision_with_list(fire, self.puddle_list)
-        if colliding_bigpuddle:
+        colliding_person = arcade.check_for_collision_with_list(fire, self.guest_list)
+        colliding_person += arcade.check_for_collision_with_list(fire, self.librarian_list)
+        if colliding_bigpuddle or colliding_person:
             self.lost_game = True
 
 
     def spread_fire(self):
         """fire spreads of adjacent tiles"""
-        self.fire_spread_time = random.random()
+        self.fire_spread_time = random.random() * 0.4
         if len(self.tiles_on_fire) > 0:
             tiles_to_add = []
             for tile in self.tiles_on_fire:
@@ -859,21 +888,26 @@ class MyGame(arcade.View):
         if self.current_item > 0:
             # only update clicked_tile if not using hand
             self.clicked_tile = self.pixel_to_tile(self.world_x, self.world_y, 32 * TILE_SCALING, 32 * TILE_SCALING, self.node_pos["dimensions"][1])
-
+            
+            # using mop
             if self.current_item == 1:
+                # check if hovering over puddle or small puddle
                 self.hovered_puddles = arcade.get_sprites_at_point((self.world_x,self.world_y), self.puddle_list)
-                self.hovered_puddles+= arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
+                self.hovered_puddles += arcade.get_sprites_at_point((self.world_x,self.world_y), self.small_pud_list)
                 if self.hovered_puddles:
                     self.correct_tool = True
                 else:
                     self.correct_tool = False
-
+            
+            # water bucket
             elif self.current_item == 2 and self.clicked_tile in self.floor_tiles and self.water_level >= 1:
                 self.correct_tool = True
 
+            # torch
             elif self.current_item == 3 and self.clicked_tile in self.burnable_tiles:
                 self.correct_tool = True
 
+            # shovel
             elif self.current_item == 4 and self.clicked_tile in self.wall_tiles:
                 self.correct_tool = True       
             else:
@@ -883,7 +917,7 @@ class MyGame(arcade.View):
             self.hovered_guests += arcade.get_sprites_at_point((self.world_x,self.world_y), self.librarian_list)
             if self.hovered_guests:
                 for guest in self.hovered_guests:
-                    if guest.hurtbox_in_range():
+                    if guest.hurtbox_in_range() and not guest.walking_to_exit:
                         self.correct_tool = True
                     else:
                         self.correct_tool = False
@@ -1010,6 +1044,72 @@ class MenuView(arcade.View):
         self.uimanager.draw()
 
         arcade.draw_text("Library of Babel", SCREEN_WIDTH/3, SCREEN_HEIGHT*3/4, arcade.color.WHITE, 100, font_name = "times", bold = True, italic = True)
+
+
+class WinView(arcade.View):
+    """Main menu view class."""
+
+    def __init__(self, main_view, menu_view):
+        super().__init__()
+
+        self.window.set_mouse_visible(True)
+
+        # Changing background color of screen
+        arcade.set_background_color((82, 55, 16))
+
+        # Creating a UI MANAGER to handle the UI
+        self.uimanager = arcade.gui.UIManager()
+
+        self.game_view = main_view
+        self.menu_view = menu_view
+
+    def on_hide_view(self):
+        self.uimanager.disable()
+
+
+    def on_show(self):
+        self.uimanager.enable()
+        self.create_menu()
+
+
+    def create_menu(self):
+        # Creating Button using UIFlatButton
+        next_lvl_button = arcade.gui.UIFlatButton(text="Next Level",
+                                               width=200)
+
+        exit_button = arcade.gui.UIFlatButton(text="Main Menu",
+                                               width=200)
+        
+        # Assigning our on_buttonclick() function
+        #lvl1_button.on_click = self.on_buttonclick
+
+        v_box = arcade.gui.UIBoxLayout(space_between=10)
+        v_box.add(next_lvl_button)
+        v_box.add(exit_button)
+
+        anchor = arcade.gui.UIAnchorWidget(child=v_box, anchor_x="center", anchor_y="center")
+
+        self.uimanager.add(anchor)
+
+
+        @next_lvl_button.event("on_click")
+        def on_click_next_lvl(event):
+            global LEVEL
+            LEVEL += 1
+            graph_to_tilemap.make_map(1)
+            self.window.show_view(self.game_view)
+        
+        @exit_button.event("on_click")
+        def on_click_exit(event):
+            self.window.show_view(self.menu_view)
+
+    def on_draw(self):
+        arcade.start_render()
+        
+        # Drawing our ui manager
+        self.uimanager.draw()
+
+        arcade.draw_text("You Win", SCREEN_WIDTH/3, SCREEN_HEIGHT*3/4, arcade.color.WHITE, 100, font_name = "times", bold = True, italic = True)
 
 
 def main():

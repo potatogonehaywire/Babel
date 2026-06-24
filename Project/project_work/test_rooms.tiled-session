@@ -30,11 +30,11 @@
             }
         },
         "D:/Stuff/code/Babel/Project/data/maps/level6.tmj": {
-            "scale": 0.125,
-            "selectedLayer": 4,
+            "scale": 0.25,
+            "selectedLayer": -1,
             "viewCenter": {
-                "x": 2240,
-                "y": 3008
+                "x": 2180,
+                "y": 4124
             }
         },
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj": {
@@ -76,13 +76,17 @@
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj",
         "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx",
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx",
-        "D:/Stuff/code/Babel/Project/data/maps/level6.tmj"
+        "D:/Stuff/code/Babel/Project/data/maps/level6.tmj",
+        "D:/Stuff/code/Babel/Project/data/maps/level0.tmj",
+        "D:/Stuff/code/Babel/Project/data/maps/level3.tmj"
     ],
     "project": "test_rooms.tiled-project",
     "recentFiles": [
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj",
         "D:/Stuff/code/Babel/Project/data/sprites/room_tileset.tsx",
         "D:/Stuff/code/Babel/Project/data/sprites/puddles_tileset.tsx",
+        "D:/Stuff/code/Babel/Project/data/maps/level3.tmj",
+        "D:/Stuff/code/Babel/Project/data/maps/level0.tmj",
         "D:/Stuff/code/Babel/Project/data/maps/level6.tmj",
         "D:/Stuff/code/Babel/Project/dungeon_map.tmj"
     ],
