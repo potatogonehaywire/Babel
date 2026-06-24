@@ -412,6 +412,7 @@ class MyGame(arcade.View):
 
         self.water_level = 0        
         
+        self.initial_guests = len(self.guest_list) + len(self.librarian_list)
 
         # Read in the tiled map
         self.tile_map = arcade.load_tilemap(map_name, scaling=TILE_SCALING)
@@ -547,7 +548,7 @@ class MyGame(arcade.View):
         # display text
         arcade.draw_text(f"Percentage of level burnt: {self.percent_level_burnt:.2f}%", 30, 990, arcade.color.WHITE, 25)
         arcade.draw_text(f"Puddles Wiped: {int((self.initial_puddles - len(self.puddle_list)))} / {int(self.initial_puddles)}", 30, 930, arcade.color.WHITE, 25)
-        arcade.draw_text(f"People Saved: {self.guests_hit} / {len(self.guest_list) + len(self.librarian_list)}", 30, 890, arcade.color.WHITE, 25)
+        arcade.draw_text(f"People Saved: {self.guests_hit} / {self.initial_guests}", 30, 890, arcade.color.WHITE, 25)
         arcade.draw_text(f"Time Left: {self.time_left:.2f} s", 1380, 980, arcade.color.WHITE, 25)
         
         # draw restart button
@@ -628,7 +629,12 @@ class MyGame(arcade.View):
             if self.library_sound:
                 arcade.stop_sound(self.library_sound)
             menu_view = MenuView(self)
-            self.window.show_view(menu_view)
+            if LEVEL < 6:
+                win_view = WinView(menu_view)
+                self.window.show_view(win_view)
+            else:
+                last_view = LastView(menu_view)
+                self.window.show_view(last_view)
         
         # player loses game if the fire takes too long to spread, doesn't restart game fully
         if self.time_left <= 0:
@@ -818,6 +824,7 @@ class MyGame(arcade.View):
         pixel_y = (map_height - tile_y - 1) * tile_height + tile_height / 2
         return pixel_x, pixel_y
 
+
     def spawn_fire(self, x, y):
         """ spawns fire using inputted location"""
         fire = arcade.Sprite()
@@ -913,6 +920,7 @@ class MyGame(arcade.View):
             else:
                 self.correct_tool = False
         else:
+            # using hand, check if hovering over guest
             self.hovered_guests = arcade.get_sprites_at_point((self.world_x,self.world_y), self.guest_list)
             self.hovered_guests += arcade.get_sprites_at_point((self.world_x,self.world_y), self.librarian_list)
             if self.hovered_guests:
@@ -973,9 +981,6 @@ class MenuView(arcade.View):
                                                width=200)
         exit_button = arcade.gui.UIFlatButton(text="Quit",
                                                width=200)
-        
-        # Assigning our on_buttonclick() function
-        #lvl1_button.on_click = self.on_buttonclick
 
         v_box = arcade.gui.UIBoxLayout(space_between=10)
         v_box.add(lvl1_button)
@@ -1091,7 +1096,7 @@ class WinView(arcade.View):
 
         self.uimanager.add(anchor)
 
-
+        
         @next_lvl_button.event("on_click")
         def on_click_next_lvl(event):
             global LEVEL
@@ -1112,6 +1117,63 @@ class WinView(arcade.View):
         arcade.draw_text("You Win", SCREEN_WIDTH/3, SCREEN_HEIGHT*3/4, arcade.color.WHITE, 100, font_name = "times", bold = True, italic = True)
 
 
+class LastView(arcade.View):
+    """Main menu view class."""
+
+    def __init__(self,menu_view):
+        super().__init__()
+
+        self.window.set_mouse_visible(True)
+
+        # Changing background color of screen
+        arcade.set_background_color((82, 55, 16))
+
+        # Creating a UI MANAGER to handle the UI
+        self.uimanager = arcade.gui.UIManager()
+
+        self.menu_view = menu_view
+
+    def on_hide_view(self):
+        self.uimanager.disable()
+
+
+    def on_show(self):
+        self.uimanager.enable()
+        self.create_menu()
+
+
+    def create_menu(self):
+        # Creating Button using UIFlatButton
+        next_lvl_button = arcade.gui.UIFlatButton(text="Next Level",
+                                               width=200)
+
+        exit_button = arcade.gui.UIFlatButton(text="Main Menu",
+                                               width=200)
+        
+        # Assigning our on_buttonclick() function
+        #lvl1_button.on_click = self.on_buttonclick
+
+        v_box = arcade.gui.UIBoxLayout(space_between=10)
+        v_box.add(exit_button)
+
+        anchor = arcade.gui.UIAnchorWidget(child=v_box, anchor_x="center", anchor_y="center")
+
+        self.uimanager.add(anchor)
+
+        @exit_button.event("on_click")
+        def on_click_exit(event):
+            self.window.show_view(self.menu_view)
+
+    def on_draw(self):
+        arcade.start_render()
+        
+        # Drawing our ui manager
+        self.uimanager.draw()
+
+        arcade.draw_text("You Burned Down The Library", SCREEN_WIDTH/6, SCREEN_HEIGHT*3/5, arcade.color.WHITE, 70, font_name = "times", bold = True, italic = True)
+
+
+
 def main():
     """Main method """
     window = arcade.Window(SCREEN_WIDTH, SCREEN_HEIGHT, "Library of Babel")
@@ -1119,6 +1181,7 @@ def main():
     window.set_location(0,0)
     game_view = MyGame()
     menu_view = MenuView(game_view)
+    last_view = LastView(menu_view)
     window.show_view(menu_view)
     arcade.run()
     
