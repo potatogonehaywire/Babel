@@ -97,7 +97,7 @@ def fruchterman_reingold(edges, num_nodes, width, height, iterations):
     # save_png(E, positions, 500, 300, "graph_original.png", 150)    
     
     area = width * height
-    ideal_dist = math.sqrt(area/(num_nodes*7))
+    ideal_dist = math.sqrt(area/(num_nodes*8))
 
     temperature = width / 10.0
     cooling = temperature / (iterations + 1)
@@ -238,22 +238,27 @@ def reconnect(positions, num_nodes):
     return accepted, map_connected
 
 
-def generate_graphs():
-    edges = [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (2,5), (1,5), (7,8), (8,9), (4,6), (4,2), (3,6), (2,5), (1,5), (8, 3), (8, 5)]
-    #, (7,8), (8,9), (9,10), (10,11), (11,12),(12,13), (13,14), (14,15), (15,16),(4,6), (4,2), (3,6), (2,5), (1,5), (14,3), (15, 7), (13, 9), (8, 3), (10, 13), (10, 12), (14, 11), (15, 1), (11, 3), (11, 7), (11, 9), (8, 5)
-    num_nodes = 10
-    map_is_connected = False
+def generate_graphs(level):
+    # level 5
+    edges = {
+        1: [(0,1),(1,2), (2,3), (1,3)], 
+        2: [(0,1),(1,2), (2,3), (3,4), (4,2), (1,3)],
+        3: [(0,1),(1,2), (2,3), (3,4), (4,5), (4,2), (2,5), (1,5), (1,3)], 
+        4: [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (4,2), (3,6), (1,5), (4,6), (2,5), (1,5)], 
+        5: [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (3,6), (1,5), (2,5), (1,5)], 
+        6 : [(0,1),(1,2), (2,3), (3,4), (4,5), (5,6), (6,7),(4,6), (4,2), (1,5), (7,8), (8,9), (3,6), (2,5), (8, 3), (8, 5)]
+        }
+    num_nodes = {1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 10}
 
 
-    positions = fruchterman_reingold(edges, num_nodes, 500, 500, 100)
+    positions = fruchterman_reingold(edges[level], num_nodes[level], 500, 500, 100)
     # G = nx.Graph()
     # G.add_edges_from(edges)
     #save_png(G, positions, 500, 500, "graph_force.png", 150)
 
-    edges , map_is_connected = reconnect(positions, num_nodes)
-    print(map_is_connected)
+    edges[level] = reconnect(positions, num_nodes[level])
     H = nx.Graph()
-    H.add_edges_from(edges)
+    H.add_edges_from(edges[level])
 
     save_png(H, positions, 500, 500, "graph_reorder.png", 150)
     export_nodes = []
@@ -264,7 +269,7 @@ def generate_graphs():
         export_positions["y"] = coords[1]//2
         export_nodes.append(export_positions)
     
-    return export_nodes, edges
+    return export_nodes, edges[level]
 
     
 # main()

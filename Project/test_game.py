@@ -11,6 +11,7 @@ import math
 import json
 from pyglet.math import Vec2
 from collections import Counter
+import graph_to_tilemap
 
 SPRITE_SCALING_PLAYER = 3
 SPRITE_SCALING_HOTBAR = 1.5
@@ -275,7 +276,6 @@ class MyGame(arcade.View):
         
         # Set up the player info
         self.player = None
-        LEVEL = 1
         self.setup()
         
         self.bucket = None
@@ -304,13 +304,31 @@ class MyGame(arcade.View):
         # find map
         match LEVEL:
             case 1:
-                print("level1")
-                map_name = "data/maps/level6.tmj"
-                with open('data/maps/graph6.json') as json_file:
+                # chooses map and reads its json file
+                map_name = "data/maps/level1.tmj"
+                with open('data/maps/graph1.json') as json_file:
                     self.node_pos = json.load(json_file)
-                    print(self.node_pos)
+
             case 2:
-                print("level2")
+                map_name = "data/maps/level2.tmj"
+                with open('data/maps/graph2.json') as json_file:
+                    self.node_pos = json.load(json_file)
+            
+            case 3:
+                map_name = "data/maps/level3.tmj"
+                with open('data/maps/graph3.json') as json_file:
+                    self.node_pos = json.load(json_file)
+
+            case 4:
+                map_name = "data/maps/level4.tmj"
+                with open('data/maps/graph4.json') as json_file:
+                    self.node_pos = json.load(json_file)
+            case 5:
+                map_name = "data/maps/level5.tmj"
+                with open('data/maps/graph5.json') as json_file:
+                    self.node_pos = json.load(json_file)
+            
+            case 6:
                 map_name = "data/maps/level6.tmj"
                 with open('data/maps/graph6.json') as json_file:
                     self.node_pos = json.load(json_file)
@@ -943,29 +961,42 @@ class MenuView(arcade.View):
         def on_click_1(event):
             global LEVEL
             LEVEL = 1
-
+            graph_to_tilemap.make_map(1)
             self.window.show_view(self.game_view)
 
         @lvl2_button.event("on_click")
         def on_click_2(event):
             global LEVEL
             LEVEL = 2
+            graph_to_tilemap.make_map(2)
             self.window.show_view(self.game_view)
 
         @lvl3_button.event("on_click")
         def on_click_3(event):
+            global LEVEL
+            LEVEL = 3
+            graph_to_tilemap.make_map(3)
             self.window.show_view(self.game_view)
 
         @lvl4_button.event("on_click")
         def on_click_4(event):
+            global LEVEL
+            LEVEL = 4
+            graph_to_tilemap.make_map(4)
             self.window.show_view(self.game_view)
 
         @lvl5_button.event("on_click")
         def on_click_5(event):
+            global LEVEL
+            LEVEL = 5
+            graph_to_tilemap.make_map(5)
             self.window.show_view(self.game_view)
 
         @lvl6_button.event("on_click")
         def on_click_6(event):
+            global LEVEL
+            LEVEL = 6
+            graph_to_tilemap.make_map(6)
             self.window.show_view(self.game_view)
         
         @exit_button.event("on_click")

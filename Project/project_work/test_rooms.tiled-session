@@ -13,12 +13,28 @@
         "D:/Stuff/code/Babel/Project/data/maps/data/sprites/room_tileset.tsx": {
             "scaleInDock": 1
         },
+        "D:/Stuff/code/Babel/Project/data/maps/level0.tmj": {
+            "scale": 0.134521484375,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 1776.667876588022,
+                "y": 3070.1415607985477
+            }
+        },
+        "D:/Stuff/code/Babel/Project/data/maps/level3.tmj": {
+            "scale": 0.17632575757575758,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 1877.207303974221,
+                "y": 1741.0955961331897
+            }
+        },
         "D:/Stuff/code/Babel/Project/data/maps/level6.tmj": {
             "scale": 0.125,
             "selectedLayer": 4,
             "viewCenter": {
-                "x": 2856,
-                "y": 2088
+                "x": 2240,
+                "y": 3008
             }
         },
         "D:/Stuff/code/Babel/Project/data/maps/test_map.tmj": {
